@@ -1,0 +1,36 @@
+import streamlit as st
+
+# Configuration de la page
+st.set_page_config(
+    page_title="Yorta Yorta Vegetation Monitor",
+    page_icon="🌿",
+    layout="wide"
+)
+
+# Titre
+st.title("🌿 Yorta Yorta Vegetation Monitor")
+
+st.write(
+    """
+    This application explores vegetation changes across Yorta Yorta Country
+    using remote sensing and GIS analysis.
+    """
+)
+
+# Section de test
+st.header("Project overview")
+
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.metric("Study area", "Yorta Yorta Country")
+
+with col2:
+    st.metric("Data source", "Satellite imagery")
+
+with col3:
+    st.metric("Analysis", "Vegetation change")
+
+st.info(
+    "🚧 Initial version — GIS layers and satellite analysis will be added soon."
+)
