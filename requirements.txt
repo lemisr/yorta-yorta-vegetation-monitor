@@ -1,1 +1,12 @@
-
+streamlit
+geopandas
+pandas
+numpy
+matplotlib
+folium
+streamlit-folium
+rasterio
+earthengine-api
+geemap
+scikit-learn
+reportlab
