@@ -137,7 +137,7 @@ if map_data and map_data["all_drawings"]:
      )
 
      if is_valid:
-    st.success("✅ Analysis area validated")
+         st.success("✅ Analysis area validated")
 
     # Ajouter seulement si valide
     folium.GeoJson(
@@ -152,4 +152,4 @@ if map_data and map_data["all_drawings"]:
     ).add_to(m)
 
 else:
-    st.error("❌ Selected area is outside the application boundary")
+st.error("❌ Selected area is outside the application boundary")
