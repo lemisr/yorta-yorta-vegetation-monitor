@@ -57,6 +57,14 @@ minx, miny, maxx, maxy = bounds
 center_lat = (miny + maxy) / 2
 center_lon = (minx + maxx) / 2
 
+
+
+# Créer la carte
+m = folium.Map(
+    location=[center_lat, center_lon],
+    zoom_start=10
+)
+
 # Créer un masque autour de la zone d'étude
 
 world = box(-180, -90, 180, 90)
@@ -77,13 +85,6 @@ folium.GeoJson(
         "weight": 0
     }
 ).add_to(m)
-
-# Créer la carte
-m = folium.Map(
-    location=[center_lat, center_lon],
-    zoom_start=10
-)
-
 
 # Ajouter fond satellite Esri
 folium.TileLayer(
