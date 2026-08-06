@@ -120,7 +120,7 @@ map_data = st_folium(
 # Récupération de la zone dessinée
 if map_data and map_data["all_drawings"]:
 
-    drawn = map_data["all_drawings"][0]
+    drawn = map_data["all_drawings"][-1]
 
     # Transformer GeoJSON en géométrie
     selected_geometry = shape(drawn["geometry"])
