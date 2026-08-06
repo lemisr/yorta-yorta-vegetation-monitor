@@ -6,6 +6,13 @@ from shapely.geometry import shape
 from shapely.geometry import box
 from folium.plugins import Draw
 
+#Connexion GEE
+try:
+    ee.Initialize()
+    st.success("V GEE connected")
+except Exception as e:
+    st.error(f"Earth Engine connection failed: {e}")
+
 
 # Configuration
 st.set_page_config(
