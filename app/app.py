@@ -23,11 +23,27 @@ st.write(
     "Interactive vegetation monitoring application using GIS and remote sensing."
 )
 
+uploaded_file = st.file_uploader(
+    "Upload your analysis area (GeoJSON)",
+    type = ["geojson"]
+)    
 
 # Charger la limite de l'application
 boundary = gpd.read_file(
     "data/raw/app_boundary.geojson"
 )
+
+uploaded_area = None
+if uploaded_file:
+    uploaded_area = gpd.read_file(uploaded_file)
+    st.success("GeoJSON loaded")
+
+if uploaded_area is not None:
+    if uploaded_area.crs != boundary.crs:
+        uploaded_area = 
+uploaded_area.to_crs(boundary.crs)        
+    
+
 
 #Calcul de l'emprise
 bounds = boundary.total_bounds
