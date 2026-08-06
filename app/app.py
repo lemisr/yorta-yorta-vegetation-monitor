@@ -1,6 +1,7 @@
 import streamlit as st
 import geopandas as gpd
 import folium
+import ee
 from streamlit_folium import st_folium
 from shapely.geometry import shape
 from shapely.geometry import box
