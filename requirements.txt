@@ -11,3 +11,4 @@ geemap
 scikit-learn
 reportlab
 shapely
+earthengine-api
