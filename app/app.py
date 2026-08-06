@@ -3,7 +3,9 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from shapely.geometry import box
+from shapely.geometry import shape
 from folium.plugins import Draw
+
 
 
 # Configuration
@@ -114,12 +116,30 @@ map_data = st_folium(
     height=700
 )
 
-#Récupération de la zone dessinée
-if map_data and map_data ["all_drawings"]:
+# Récupération de la zone dessinée
+if map_data and map_data["all_drawings"]:
 
-    st.subheader ("Selected analysis area")
-    
     drawn = map_data["all_drawings"][0]
 
-    st.write(drawn)
+    # Transformer GeoJSON en géométrie
+    selected_geometry = shape(drawn["geometry"])
 
+    # Créer une couche GeoDataFrame
+    selected_area = gpd.GeoDataFrame(
+        geometry=[selected_geometry],
+        crs="EPSG:4326"
+    )
+
+    # Ajouter la zone sélectionnée à la carte
+    folium.GeoJson(
+        selected_area,
+        name="Selected area",
+        style_function=lambda x: {
+            "fillColor": "blue",
+            "color": "blue",
+            "weight": 1,
+            "fillOpacity": 0.3
+        }
+    ).add_to(m)
+
+    st.success("Analysis area selected")
