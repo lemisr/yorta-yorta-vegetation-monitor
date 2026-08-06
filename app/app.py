@@ -138,8 +138,7 @@ if map_data and map_data["all_drawings"]:
 
      if is_valid:
          st.success("✅ Analysis area validated")
-     else:
-         st.error("❌ Selected area is outside the application boundary")
+     
 
 
      # Ajouter la zone sélectionnée à la carte
@@ -153,3 +152,5 @@ if map_data and map_data["all_drawings"]:
              "fillOpacity": 0.3
          }
      ).add_to(m)
+    else:
+         st.error("❌ Selected area is outside the application boundary")
