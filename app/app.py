@@ -94,12 +94,39 @@ if uploaded_area is not None:
     ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
     .filterDate("2025-01-01", "2025-12-31")
     .filterBounds(aoi)
+    .filter(
+            ee.Filter.lt(
+                "CLOUDY_PIXEL_PERCENTAGE",
+                20
+            )
+        )
+        .map(mask_clouds)
     )
+
+    image = images.median()
+
+    ndvi = (
+        image.select("B8")
+        .subtract(image.select("B4"))
+        .divide(
+            image.select("B8")
+            .add(image.select("B4"))
+        )
+        .rename("NDVI")
+        .clip(aoi)
+    )
+
+    return ndvi    
+    
 
 
     count = images.size().getInfo()
 
     st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
+
+    ndvi = calculate_ndvi(aoi)
+
+    st.success("✅ NDVI calculated")
 
 
 
@@ -201,6 +228,23 @@ m.fit_bounds([
     [maxy, maxx]
 ])
 
+ndvi_map = ndvi.getMapId({
+    "min": -1,
+    "max": 1,
+    "palette": [
+        "blue",
+        "yellow",
+        "green"
+    ]
+})
+
+folium.TileLayer(
+    tiles=ndvi_map["tile_fetcher"].url_format,
+    attr="Google Earth Engine",
+    name="NDVI 2025",
+    overlay=True,
+    control=True
+).add_to(m)
 
 # Afficher la carte
 map_data = st_folium(
