@@ -152,5 +152,5 @@ if map_data and map_data["all_drawings"]:
              "fillOpacity": 0.3
          }
      ).add_to(m)
-    else:
+     else:
          st.error("❌ Selected area is outside the application boundary")
