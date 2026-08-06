@@ -35,14 +35,14 @@ try:
     .filterBounds(
         ee.Geometry.Point([-0.060944, 45.084556])
     )
-
+)
 
 count = images.size().getInfo()
 
 st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
 
 except Exception as e:
-    st.error(f"Earth Engine connection failed: {e}"
+    st.error(f"Earth Engine connection failed: {e}")
 )             
 
 # Configuration
