@@ -32,11 +32,11 @@ bounds = boundary.total_bounds
 minx,miny,maxx,maxy = bounds
 
 center_lat = (miny + maxy) / 2
-center_long = (minx + maxx) / 2
+center_lon = (minx + maxx) / 2
 
 # Créer la carte
 m = folium.Map(
-    location = [center_lat, center_lon],
+    location=[center_lat, center_lon],
     zoom_start=10
 )
 
