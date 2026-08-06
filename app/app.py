@@ -40,8 +40,7 @@ if uploaded_file:
 
 if uploaded_area is not None:
     if uploaded_area.crs != boundary.crs:
-        uploaded_area = 
-uploaded_area.to_crs(boundary.crs)        
+        uploaded_area = uploaded_area.to_crs(boundary.crs)        
     
 
 
