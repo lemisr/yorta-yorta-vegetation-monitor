@@ -2,10 +2,8 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
-from shapely.geometry import box
 from shapely.geometry import shape
 from folium.plugins import Draw
-
 
 
 # Configuration
@@ -23,36 +21,42 @@ st.write(
     "Interactive vegetation monitoring application using GIS and remote sensing."
 )
 
+
+# Upload GeoJSON
 uploaded_file = st.file_uploader(
     "Upload your analysis area (GeoJSON)",
-    type = ["geojson"]
-)    
+    type=["geojson"]
+)
+
 
 # Charger la limite de l'application
 boundary = gpd.read_file(
     "data/raw/app_boundary.geojson"
 )
 
-uploaded_area = None
-if uploaded_file:
-    uploaded_area = gpd.read_file(uploaded_file)
-    st.success("GeoJSON loaded")
 
-if uploaded_area is not None:
+# Charger la zone utilisateur
+uploaded_area = None
+
+if uploaded_file is not None:
+
+    uploaded_area = gpd.read_file(uploaded_file)
+
+    # Harmoniser les projections
     if uploaded_area.crs != boundary.crs:
         uploaded_area = uploaded_area.to_crs(boundary.crs)
-        
+
+    st.success("GeoJSON loaded")
 
 
-
-
-#Calcul de l'emprise
+# Calcul de l'emprise
 bounds = boundary.total_bounds
 
-minx,miny,maxx,maxy = bounds
+minx, miny, maxx, maxy = bounds
 
 center_lat = (miny + maxy) / 2
 center_lon = (minx + maxx) / 2
+
 
 # Créer la carte
 m = folium.Map(
@@ -60,16 +64,6 @@ m = folium.Map(
     zoom_start=10
 )
 
-folium.GeoJson(
-    uploaded_area,
-    name = "Uploaded area",
-    style_function = lambda x: {
-        "fillColor": "green",
-        "color": "green",
-        "weight": 1,
-        "fillOpacity": 0.3
-    }
-).add_to(m)
 
 # Ajouter fond satellite Esri
 folium.TileLayer(
@@ -80,44 +74,36 @@ folium.TileLayer(
 ).add_to(m)
 
 
-# Créer un masque autour de la zone d'étude
-
-world = box(-180, -90, 180, 90)
-
-mask = world.difference(boundary.geometry.iloc[0])
-
-mask_gdf = gpd.GeoDataFrame(
-    geometry=[mask],
-    crs="EPSG:4326"
-)
-
-folium.GeoJson(
-    mask_gdf,
-    style_function=lambda x: {
-        "fillColor": "black",
-        "color": "black",
-        "fillOpacity": 0.5,
-        "weight": 0
-    }
-).add_to(m)
-
-
-
-# Ajouter la limite
+# Ajouter limite application
 folium.GeoJson(
     boundary,
     name="Application boundary",
     style_function=lambda x: {
         "fillColor": "transparent",
-        "color": "black",
-        "weight": 1
+        "color": "red",
+        "weight": 3
     }
 ).add_to(m)
 
 
-#Outil de dessin
+# Ajouter GeoJSON importé
+if uploaded_area is not None:
+
+    folium.GeoJson(
+        uploaded_area,
+        name="Uploaded area",
+        style_function=lambda x: {
+            "fillColor": "green",
+            "color": "green",
+            "weight": 2,
+            "fillOpacity": 0.3
+        }
+    ).add_to(m)
+
+
+# Outil de dessin
 draw = Draw(
-    export = True,
+    export=True,
     draw_options={
         "polyline": False,
         "polygon": True,
@@ -125,23 +111,24 @@ draw = Draw(
         "circle": False,
         "marker": False,
         "circlemarker": False
-    }    
+    }
 )
 
 draw.add_to(m)
 
-#Zoom auto sur la zone
+
+# Zoom automatique
 m.fit_bounds([
     [miny, minx],
     [maxy, maxx]
 ])
 
+
 # Afficher la carte
 map_data = st_folium(
-     m,
-     width=1000,
-     height=700,
-    
+    m,
+    width=1000,
+    height=700
 )
 
 
@@ -159,25 +146,33 @@ if map_data and map_data["all_drawings"]:
         crs="EPSG:4326"
     )
 
-    # Vérification que la zone est dans la limite
+
+    # Vérifier projection
+    if selected_area.crs != boundary.crs:
+        selected_area = selected_area.to_crs(boundary.crs)
+
+
+    # Validation dans la limite
     is_valid = selected_area.geometry.iloc[0].within(
         boundary.geometry.iloc[0]
     )
 
+
     if is_valid:
+
         st.success("✅ Analysis area validated")
 
-        # Ajouter seulement si valide
         folium.GeoJson(
             selected_area,
             name="Selected area",
             style_function=lambda x: {
                 "fillColor": "blue",
                 "color": "blue",
-                "weight": 1,
+                "weight": 2,
                 "fillOpacity": 0.3
             }
         ).add_to(m)
 
     else:
+
         st.error("❌ Selected area is outside the application boundary")
