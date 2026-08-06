@@ -36,7 +36,7 @@ center_long = (minx + maxx) / 2
 
 # Créer la carte
 m = folium.Map(
-    location=[center_lat, center_lon],
+    location = [center_lat, center_lon],
     zoom_start=10
 )
 
