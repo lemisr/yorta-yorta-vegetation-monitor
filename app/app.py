@@ -86,7 +86,7 @@ folium.GeoJson(
 
 #Zoom auto sur la zone
 m.fit_bounds([
-    [miny, minx]
+    [miny, minx],
     [maxy, maxx]
 ])
 
