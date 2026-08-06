@@ -9,10 +9,20 @@ from folium.plugins import Draw
 
 #Connexion GEE
 try:
-    credentials = ee.ServiceAccountCredentials(
-        st.secrets["earthengine"]["client_email"],
-        st.secrets["earthengine"]["private_key"]
-    )
+    import json
+from google.oauth2 import service_account
+
+credentials = service_account.Credentials.from_service_account_info(
+    dict(st.secrets["earthengine"]),
+    scopes=[
+        "https://www.googleapis.com/auth/earthengine"
+    ]
+)
+
+ee.Initialize(
+    credentials,
+    project=st.secrets["earthengine"]["project_id"]
+)
 
     ee.Initialize(
         credentials,
