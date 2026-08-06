@@ -80,7 +80,7 @@ folium.GeoJson(
     style_function=lambda x: {
         "fillColor": "transparent",
         "color": "black",
-        "weight": 2
+        "weight": 1
     }
 ).add_to(m)
 
