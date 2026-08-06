@@ -19,7 +19,7 @@ try:
     ]
 )
 
-ee.Initialize(
+    ee.Initialize(
     credentials,
     project=st.secrets["earthengine"]["project_id"]
 )
