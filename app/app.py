@@ -116,7 +116,7 @@ if uploaded_area is not None:
         .clip(aoi)
     )
 
-    return ndvi    
+        
     
 
 
@@ -124,9 +124,7 @@ if uploaded_area is not None:
 
     st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
 
-    ndvi = calculate_ndvi(aoi)
-
-    st.success("✅ NDVI calculated")
+   
 
 
 
