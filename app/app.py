@@ -168,7 +168,7 @@ folium.GeoJson(
 if uploaded_area is not None:
 
     folium.GeoJson(
-        uploaded_area,
+        uploaded_area[["geometry"]].to_json(),
         name="Uploaded area",
         style_function=lambda x: {
             "fillColor": "green",
