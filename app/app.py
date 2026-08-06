@@ -80,8 +80,8 @@ folium.GeoJson(
     name="Application boundary",
     style_function=lambda x: {
         "fillColor": "transparent",
-        "color": "red",
-        "weight": 3
+        "color": "black",
+        "weight": 1
     }
 ).add_to(m)
 
@@ -95,7 +95,7 @@ if uploaded_area is not None:
         style_function=lambda x: {
             "fillColor": "green",
             "color": "green",
-            "weight": 2,
+            "weight": 1,
             "fillOpacity": 0.3
         }
     ).add_to(m)
@@ -168,7 +168,7 @@ if map_data and map_data["all_drawings"]:
             style_function=lambda x: {
                 "fillColor": "blue",
                 "color": "blue",
-                "weight": 2,
+                "weight": 1,
                 "fillOpacity": 0.3
             }
         ).add_to(m)
