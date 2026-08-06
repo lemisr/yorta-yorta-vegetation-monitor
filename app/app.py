@@ -137,21 +137,19 @@ if map_data and map_data["all_drawings"]:
      )
 
      if is_valid:
-         st.success("✅ Analysis area validated")
-     
+    st.success("✅ Analysis area validated")
 
+    # Ajouter seulement si valide
+    folium.GeoJson(
+        selected_area,
+        name="Selected area",
+        style_function=lambda x: {
+            "fillColor": "blue",
+            "color": "blue",
+            "weight": 1,
+            "fillOpacity": 0.3
+        }
+    ).add_to(m)
 
-     # Ajouter la zone sélectionnée à la carte
-     folium.GeoJson(
-         selected_area,
-         name="Selected area",
-         style_function=lambda x: {
-             "fillColor": "blue",
-             "color": "blue",
-             "weight": 1,
-             "fillOpacity": 0.3
-         }
-     ).add_to(m)
-    
-     else:
-          st.error("❌ Selected area is outside the application boundary")
+else:
+    st.error("❌ Selected area is outside the application boundary")
