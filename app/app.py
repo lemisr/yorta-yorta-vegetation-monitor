@@ -3,6 +3,7 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from shapely.geometry import box
+from folium.plugins import Draw
 
 
 # Configuration
@@ -84,6 +85,22 @@ folium.GeoJson(
     }
 ).add_to(m)
 
+
+#Outil de dessin
+draw = Draw(
+    export = True,
+    draw_options={
+        "polyline": False,
+        "polygon": True,
+        "rectangle": True,
+        "circle": False,
+        "marker": False,
+        "circlemarker": False
+    }    
+)
+
+draw.add_to(m)
+
 #Zoom auto sur la zone
 m.fit_bounds([
     [miny, minx],
@@ -91,7 +108,7 @@ m.fit_bounds([
 ])
 
 # Afficher la carte
-st_folium(
+map_data = st_folium(
     m,
     width=1000,
     height=700
