@@ -36,7 +36,7 @@ def geopandas_to_ee(geodataframe):
     """
     Convert GeoPandas geometry to Earth Engine geometry
     """
-    geojson = geodataframe.to_json()
+    geojson = geodataframe[["geometry"]].to_json()
     geometry = json.loads(geojson)["features"][0]["geometry"]
 
     return ee.Geometry(geometry)
