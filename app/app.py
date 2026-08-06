@@ -42,7 +42,8 @@ count = images.size().getInfo()
 st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
 
 except Exception as e:
-    st.error(f"Earth Engine connection failed: {e}")
+    st.error(f"Earth Engine connection failed: {e}"
+)             
 
 # Configuration
 st.set_page_config(
