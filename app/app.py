@@ -73,6 +73,26 @@ folium.TileLayer(
     overlay=False
 ).add_to(m)
 
+# Créer un masque autour de la zone d'étude
+
+world = box(-180, -90, 180, 90)
+
+mask = world.difference(boundary.geometry.iloc[0])
+
+mask_gdf = gpd.GeoDataFrame(
+    geometry=[mask],
+    crs="EPSG:4326"
+)
+
+folium.GeoJson(
+    mask_gdf,
+    style_function=lambda x: {
+        "fillColor": "black",
+        "color": "black",
+        "fillOpacity": 0.5,
+        "weight": 0
+    }
+).add_to(m)
 
 # Ajouter limite application
 folium.GeoJson(
