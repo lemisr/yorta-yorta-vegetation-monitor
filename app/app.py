@@ -12,7 +12,7 @@ try:
     import json
     from google.oauth2 import service_account
 
-credentials = service_account.Credentials.from_service_account_info(
+    credentials = service_account.Credentials.from_service_account_info(
     dict(st.secrets["earthengine"]),
     scopes=[
         "https://www.googleapis.com/auth/earthengine"
