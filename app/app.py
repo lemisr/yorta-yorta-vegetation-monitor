@@ -53,7 +53,7 @@ folium.TileLayer(
 #Créer un masque autour de la zone d'étude
 world = box(-180, -90, 180, 90)
 
-mask = 
+mask= 
 world.difference(boundary.geometry.iloc[0])
 
 mask_gdf = gpd.GeoDataFrame(
