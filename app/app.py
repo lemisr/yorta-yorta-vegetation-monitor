@@ -29,7 +29,17 @@ try:
         project=st.secrets["earthengine"]["project_id"]
     )
 
-    st.success("✅ Earth Engine connected")
+    images = (
+    ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    .filterDate("2025-01-01", "2025-12-31")
+    .filterBounds(
+        ee.Geometry.Point([-0.060944, 45.084556])
+    )
+)
+
+count = images.size().getInfo()
+
+st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
 
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
