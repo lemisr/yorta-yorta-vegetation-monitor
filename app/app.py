@@ -113,7 +113,9 @@ m.fit_bounds([
 map_data = st_folium(
      m,
      width=1000,
-     height=700
+     height=700,
+     returned_objects = ["all_drawings"],
+     clear_drawings = True
 )
 
 
