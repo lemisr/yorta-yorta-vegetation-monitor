@@ -35,7 +35,7 @@ try:
     .filterBounds(
         ee.Geometry.Point([-0.060944, 45.084556])
     )
-)
+
 
 count = images.size().getInfo()
 
