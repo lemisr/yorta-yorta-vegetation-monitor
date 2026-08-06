@@ -90,7 +90,7 @@ if uploaded_area is not None:
 
     aoi = geopandas_to_ee(uploaded_area)
     st.success("✅ Polygon converted to Earth Engine")
-     images = (
+    images = (
     ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
     .filterDate("2025-01-01", "2025-12-31")
     .filterBounds(aoi)
