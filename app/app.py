@@ -130,7 +130,20 @@ if map_data and map_data["all_drawings"]:
         crs="EPSG:4326"
     )
 
-    # Ajouter la zone sélectionnée à la carte
+# Vérification que la zone est dans la limite de l'application
+is_valid = selected_area.geometry.iloc[0].within(
+    boundary.geometry.iloc[0]
+)
+
+if is_valid:
+    st.success("✅ Analysis area validated")
+else:
+    st.error("❌ Selected area is outside the application boundary")
+
+
+
+    
+# Ajouter la zone sélectionnée à la carte
     folium.GeoJson(
         selected_area,
         name="Selected area",
