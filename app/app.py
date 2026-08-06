@@ -128,7 +128,7 @@ if map_data and map_data["all_drawings"]:
     selected_area = gpd.GeoDataFrame(
         geometry=[selected_geometry],
         crs="EPSG:4326"
-    )
+)
 
 # Vérification que la zone est dans la limite de l'application
 is_valid = selected_area.geometry.iloc[0].within(
