@@ -113,3 +113,13 @@ map_data = st_folium(
     width=1000,
     height=700
 )
+
+#Récupération de la zone dessinée
+if map_data and map_data ["all_drawings"]:
+
+    st.subheader ("Selected analysis area")
+    
+    drawn = map_data["all_drawings"][0]
+
+    st.write(drawn)
+
