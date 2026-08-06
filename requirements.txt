@@ -10,3 +10,4 @@ earthengine-api
 geemap
 scikit-learn
 reportlab
+shapely
