@@ -31,7 +31,7 @@ try:
     .filterDate("2025-01-01", "2025-12-31")
     .filterBounds(aoi)
     )
-)
+
 
     count = images.size().getInfo()
 
