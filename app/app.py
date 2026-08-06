@@ -19,10 +19,7 @@ try:
     ]
 )
 
-    ee.Initialize(
-    credentials,
-    project=st.secrets["earthengine"]["project_id"]
-)
+    
 
     ee.Initialize(
         credentials,
@@ -37,9 +34,9 @@ try:
     )
 )
 
-count = images.size().getInfo()
+    count = images.size().getInfo()
 
-st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
+    st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
 
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
