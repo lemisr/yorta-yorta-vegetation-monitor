@@ -9,7 +9,7 @@ from folium.plugins import Draw
 #Connexion GEE
 try:
     ee.Initialize()
-    st.success("V GEE connected")
+    st.success("V Earth Engine connected")
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
 
