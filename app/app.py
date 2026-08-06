@@ -73,6 +73,19 @@ folium.TileLayer(
     overlay=False
 ).add_to(m)
 
+
+
+# Ajouter limite application
+folium.GeoJson(
+    boundary,
+    name="Application boundary",
+    style_function=lambda x: {
+        "fillColor": "transparent",
+        "color": "black",
+        "weight": 1
+    }
+).add_to(m)
+
 # Créer un masque autour de la zone d'étude
 
 world = box(-180, -90, 180, 90)
@@ -93,18 +106,6 @@ folium.GeoJson(
         "weight": 0
     }
 ).add_to(m)
-
-# Ajouter limite application
-folium.GeoJson(
-    boundary,
-    name="Application boundary",
-    style_function=lambda x: {
-        "fillColor": "transparent",
-        "color": "black",
-        "weight": 1
-    }
-).add_to(m)
-
 
 # Ajouter GeoJSON importé
 if uploaded_area is not None:
