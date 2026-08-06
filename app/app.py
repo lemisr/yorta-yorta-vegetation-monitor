@@ -120,36 +120,36 @@ map_data = st_folium(
 # Récupération de la zone dessinée
 if map_data and map_data["all_drawings"]:
 
-     drawn = map_data["all_drawings"][0]
+    drawn = map_data["all_drawings"][0]
 
-     # Transformer GeoJSON en géométrie
-     selected_geometry = shape(drawn["geometry"])
+    # Transformer GeoJSON en géométrie
+    selected_geometry = shape(drawn["geometry"])
 
-     # Créer une couche GeoDataFrame
-     selected_area = gpd.GeoDataFrame(
-         geometry=[selected_geometry],
-         crs="EPSG:4326"
-     )
+    # Créer une couche GeoDataFrame
+    selected_area = gpd.GeoDataFrame(
+        geometry=[selected_geometry],
+        crs="EPSG:4326"
+    )
 
-     # Vérification que la zone est dans la limite
-     is_valid = selected_area.geometry.iloc[0].within(
-         boundary.geometry.iloc[0]
-     )
+    # Vérification que la zone est dans la limite
+    is_valid = selected_area.geometry.iloc[0].within(
+        boundary.geometry.iloc[0]
+    )
 
-     if is_valid:
-         st.success("✅ Analysis area validated")
+    if is_valid:
+        st.success("✅ Analysis area validated")
 
-    # Ajouter seulement si valide
-    folium.GeoJson(
-        selected_area,
-        name="Selected area",
-        style_function=lambda x: {
-            "fillColor": "blue",
-            "color": "blue",
-            "weight": 1,
-            "fillOpacity": 0.3
-        }
-    ).add_to(m)
+        # Ajouter seulement si valide
+        folium.GeoJson(
+            selected_area,
+            name="Selected area",
+            style_function=lambda x: {
+                "fillColor": "blue",
+                "color": "blue",
+                "weight": 1,
+                "fillOpacity": 0.3
+            }
+        ).add_to(m)
 
-else:
-st.error("❌ Selected area is outside the application boundary")
+    else:
+        st.error("❌ Selected area is outside the application boundary")
