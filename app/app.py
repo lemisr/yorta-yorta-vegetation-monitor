@@ -42,16 +42,7 @@ if uploaded_area is not None:
     if uploaded_area.crs != boundary.crs:
         uploaded_area = uploaded_area.to_crs(boundary.crs)
         
-folium.GeoJson(
-    uploaded_area,
-    name = "Uploaded area",
-    style_function = lambda x: {
-        "fillColor": "green",
-        "color": "green",
-        "weight": 1,
-        "fillOpacity": 0.3
-    }
- ).add_to(m)
+
 
 
 
@@ -69,6 +60,16 @@ m = folium.Map(
     zoom_start=10
 )
 
+folium.GeoJson(
+    uploaded_area,
+    name = "Uploaded area",
+    style_function = lambda x: {
+        "fillColor": "green",
+        "color": "green",
+        "weight": 1,
+        "fillOpacity": 0.3
+    }
+).add_to(m)
 
 # Ajouter fond satellite Esri
 folium.TileLayer(
