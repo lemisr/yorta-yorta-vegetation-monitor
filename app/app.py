@@ -3,6 +3,7 @@ import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
 from shapely.geometry import shape
+from shapely.geometry import box
 from folium.plugins import Draw
 
 
