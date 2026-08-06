@@ -19,7 +19,7 @@ try:
     ]
 )
 
-    
+     
 
     ee.Initialize(
         credentials,
@@ -29,8 +29,7 @@ try:
     images = (
     ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
     .filterDate("2025-01-01", "2025-12-31")
-    .filterBounds(
-        ee.Geometry.Point([-0.060944, 45.084556])
+    .filterBounds(aoi)
     )
 )
 
@@ -41,6 +40,16 @@ try:
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
              
+
+def geopandas_to_ee(geodataframe):
+    """
+    Convert GeoPandas geometry to Earth Engine geometry
+    """
+    geojson = geodataframe.to_json()
+    geometry = json.loads(geojson)["features"][0]["geometry"]
+
+    return ee.Geometry(geometry)
+
 
 # Configuration
 st.set_page_config(
@@ -84,6 +93,12 @@ if uploaded_file is not None:
 
     st.success("GeoJSON loaded")
 
+if uploaded_area is not None:
+    if uploaded_area.crs != boundary.crs:
+        uploaded_area = uploaded_area.to_crs(boundary.crs)
+
+    aoi = geopandas_to_ee(uploaded_area)
+    st.success("✅ Polygon converted to Earth Engine")
 
 # Calcul de l'emprise
 bounds = boundary.total_bounds
