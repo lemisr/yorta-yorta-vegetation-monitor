@@ -2,6 +2,7 @@ import streamlit as st
 import geopandas as gpd
 import folium
 from streamlit_folium import st_folium
+from shapely.geometry import box
 
 
 # Configuration
@@ -25,11 +26,18 @@ boundary = gpd.read_file(
     "data/raw/app_boundary.geojson"
 )
 
+#Calcul de l'emprise
+bounds = boundary.total_bounds
+
+minx,miny,maxx,maxy = bounds
+
+center_lat = (miny + maxy) / 2
+center_long = (minx + maxx) / 2
 
 # Créer la carte
 m = folium.Map(
-    location=[-36.2, 145.2],
-    zoom_start=8
+    location=[center_lat, center_lon],
+    zoom_start=10
 )
 
 
@@ -42,17 +50,45 @@ folium.TileLayer(
 ).add_to(m)
 
 
+#Créer un masque autour de la zone d'étude
+world = box(-180, -90, 180, 90)
+
+mask = 
+world.difference(boundary.geometry.iloc[0])
+
+mask_gdf = gpd.GeoDataFrame(
+  geometry = [mask],
+  crs = "EPGS:4326"
+)
+
+folium.GeoJson(
+    mask_gdf,
+    style_function = lambda x: {
+        "fillColor": "black",
+        "color": "black"
+        "fillOpacity": 0.5,
+        "weight": 0
+    }
+).add_to(m)    
+
+
+
 # Ajouter la limite
 folium.GeoJson(
     boundary,
     name="Application boundary",
     style_function=lambda x: {
         "fillColor": "transparent",
-        "color": "red",
+        "color": "black",
         "weight": 3
     }
 ).add_to(m)
 
+#Zoom auto sur la zone
+m.fit_bounds([
+    [miny, minx]
+    [maxy, maxx]
+])
 
 # Afficher la carte
 st_folium(
