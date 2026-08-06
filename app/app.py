@@ -9,11 +9,20 @@ from folium.plugins import Draw
 
 #Connexion GEE
 try:
-    ee.Initialize()
-    st.success("V Earth Engine connected")
+    credentials = ee.ServiceAccountCredentials(
+        st.secrets["earthengine"]["client_email"],
+        st.secrets["earthengine"]["private_key"]
+    )
+
+    ee.Initialize(
+        credentials,
+        project=st.secrets["earthengine"]["project_id"]
+    )
+
+    st.success("✅ Earth Engine connected")
+
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
-
 
 # Configuration
 st.set_page_config(
