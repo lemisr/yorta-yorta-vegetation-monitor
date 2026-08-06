@@ -26,16 +26,7 @@ try:
         project=st.secrets["earthengine"]["project_id"]
     )
 
-    images = (
-    ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-    .filterDate("2025-01-01", "2025-12-31")
-    .filterBounds(aoi)
-    )
-
-
-    count = images.size().getInfo()
-
-    st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
+   
 
 except Exception as e:
     st.error(f"Earth Engine connection failed: {e}")
@@ -99,6 +90,19 @@ if uploaded_area is not None:
 
     aoi = geopandas_to_ee(uploaded_area)
     st.success("✅ Polygon converted to Earth Engine")
+     images = (
+    ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    .filterDate("2025-01-01", "2025-12-31")
+    .filterBounds(aoi)
+    )
+
+
+    count = images.size().getInfo()
+
+    st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
+
+
+
 
 # Calcul de l'emprise
 bounds = boundary.total_bounds
