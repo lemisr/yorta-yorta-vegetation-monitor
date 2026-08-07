@@ -251,6 +251,38 @@ folium.TileLayer(
     control=True
 ).add_to(m)
 
+legend_html = """
+<div style="
+position: fixed;
+bottom: 30px;
+left: 30px;
+width: 220px;
+height: 80px;
+background-color: white;
+border:2px solid grey;
+z-index:9999;
+font-size:14px;
+padding:10px;
+">
+
+<b>Vegetation density</b><br>
+
+<span style="color:#d73027;">Low</span>
+────────
+<span style="color:#1a9850;">High</span>
+
+<br>
+NDVI 0 → 1
+
+</div>
+"""
+
+m.get_root().html.add_child(
+    folium.Element(legend_html)
+)
+
+
+
 # Afficher la carte
 map_data = st_folium(
     m,
