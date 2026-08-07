@@ -331,6 +331,7 @@ if map_data and map_data["all_drawings"]:
         geometry=[selected_geometry],
         crs="EPSG:4326"
     )
+    selected_aoi = geopandas_to_ee(selected_area)
 
 
     # Vérifier projection
