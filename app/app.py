@@ -224,7 +224,8 @@ m.fit_bounds([
     [maxy, maxx]
 ])
 
-ndvi_map = ndvi.getMapId({
+if uploaded_area is not None:
+    ndvi_map = ndvi.getMapId({
     "min": -1,
     "max": 1,
     "palette": [
@@ -241,6 +242,8 @@ ndvi_map = ndvi.getMapId({
         
     ]
 })
+    
+
 
 folium.TileLayer(
     tiles=ndvi_map["tile_fetcher"].url_format,
