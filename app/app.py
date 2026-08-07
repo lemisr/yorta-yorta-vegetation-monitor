@@ -385,7 +385,7 @@ tiles = selected_ndvi_map["tile_fetcher"].url_format,
             overlay = True,
             control = True
     ).add_to(m)
-
+    folium.LayerControl().add_to(m)
     st.success("NDVI calculated on drawn area")
             
 
