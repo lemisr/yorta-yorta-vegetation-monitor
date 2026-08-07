@@ -228,17 +228,19 @@ m.fit_bounds([
 ])
 
 ndvi_map = ndvi.getMapId({
-    "min": 0,
+    "min": -1,
     "max": 1,
     "palette": [
         
         
         
-        "1b7837",
-        "7fbf7b",
-        "f6e8c3",
-        "d8b365",
-        "8c510a"
+        "7f7f7f",
+        "a6611a",
+        "dfc27d",
+        "f5f5f5",
+        "a6d96a",
+        "1a9850",
+        "006837"
         
     ]
 })
@@ -275,11 +277,13 @@ to right,
 
 
 
-#8c510a,
-#d8b365,
-#f6e8c3,
-#7fbf7b,
-#1b7837
+#7f7f7f,
+#a6611a,
+#dfc27d,
+#f5f5f5,
+#a6d96a,
+#1a9850,
+#006837
 );
 ">
 </div>
