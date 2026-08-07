@@ -311,12 +311,7 @@ m.get_root().html.add_child(
 
 
 
-# Afficher la carte
-map_data = st_folium(
-    m,
-    width=1000,
-    height=700
-)
+
 
 
 # Récupération de la zone dessinée
@@ -425,3 +420,13 @@ tiles = selected_ndvi_map["tile_fetcher"].url_format,
     else:
 
         st.error("❌ Selected area is outside the application boundary")
+
+    # Afficher la carte
+    map_data = st_folium(
+    m,
+    width=1000,
+    height=700
+)
+
+
+  
