@@ -197,7 +197,7 @@ if uploaded_area is not None:
         name="Uploaded area",
         style_function=lambda x: {
             
-            "color": "yellow",
+            "color": "purple",
             "weight": 1,
             "fillOpacity": 0
         }
