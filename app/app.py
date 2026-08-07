@@ -256,7 +256,7 @@ legend_html = """
 position: fixed;
 bottom: 30px;
 left: 30px;
-width: 260px;
+width: 100px;
 background-color: white;
 border:2px solid grey;
 z-index:9999;
@@ -271,11 +271,15 @@ height: 20px;
 width: 240px;
 background: linear-gradient(
 to right,
-#1b7837,
-#7fbf7b,
-#f6e8c3,
+
+
+
+
+#8c510a,
 #d8b365,
-#8c510a
+#f6e8c3,
+#7fbf7b,
+#1b7837
 );
 ">
 </div>
