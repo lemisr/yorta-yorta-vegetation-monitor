@@ -228,12 +228,14 @@ m.fit_bounds([
 ])
 
 ndvi_map = ndvi.getMapId({
-    "min": -1,
+    "min": 0,
     "max": 1,
     "palette": [
-        "blue",
-        "yellow",
-        "green"
+        "8c510a",
+        "d8b365",
+        "f6e8c3",
+        "7fbf7b",
+        "1b7837"
     ]
 })
 
