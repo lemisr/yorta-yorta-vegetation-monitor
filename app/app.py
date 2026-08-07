@@ -196,8 +196,8 @@ if uploaded_area is not None:
         uploaded_area[["geometry"]].to_json(),
         name="Uploaded area",
         style_function=lambda x: {
-            "fillColor": "green",
-            "color": "green",
+            
+            "color": "yellow",
             "weight": 1,
             "fillOpacity": 0
         }
