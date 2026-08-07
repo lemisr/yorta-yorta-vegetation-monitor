@@ -332,6 +332,10 @@ if map_data and map_data["all_drawings"]:
         geometry=[selected_geometry],
         crs="EPSG:4326"
     )
+    if selected_area.crs != boundary.crs:
+        selected_area = selected_area.to_crs(boundary.crs)
+
+    
     selected_aoi = geopandas_to_ee(selected_area)
     
     selected_images = (
