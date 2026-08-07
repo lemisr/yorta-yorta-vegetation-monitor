@@ -42,7 +42,7 @@ def geopandas_to_ee(geodataframe):
     return ee.Geometry(geometry)
 
 def mask_clouds(image):
-    scl = image.slect("SCL")
+    scl = image.select("SCL")
     mask = (
         scl.eq(8)
         .And(scl.eq(9))
