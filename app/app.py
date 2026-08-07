@@ -332,7 +332,18 @@ if map_data and map_data["all_drawings"]:
         crs="EPSG:4326"
     )
     selected_aoi = geopandas_to_ee(selected_area)
-
+    
+    selected_images = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterDate("2025-01-01", "2025-12-31")
+        .filterBounds(selected_aoi)
+        .filter(
+            ee.Filter.lt(
+                "COULDY_PIXEL_PERCENTAGE",
+                20
+            )
+        )
+    )    
 
     # Vérifier projection
     if selected_area.crs != boundary.crs:
