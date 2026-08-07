@@ -271,11 +271,11 @@ height: 20px;
 width: 240px;
 background: linear-gradient(
 to right,
-#d73027,
-#fc8d59,
-#fee08b,
-#91cf60,
-#1a9850
+#1b7837,
+#7fbf7b,
+#f6e8c3,
+#d8b365,
+#8c510a
 );
 ">
 </div>
