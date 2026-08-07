@@ -41,6 +41,17 @@ def geopandas_to_ee(geodataframe):
 
     return ee.Geometry(geometry)
 
+def mask_clouds(image):
+    scl = image.slect("SCL")
+    mask = (
+        scl.eq(4)
+        .Or(scl.eq(5))
+        .Or(scl.eq(6))
+        .Or(scl.eq(7))
+    )    
+    return image.updateMask(mask)
+
+
 
 # Configuration
 st.set_page_config(
@@ -100,7 +111,7 @@ if uploaded_area is not None:
                 20
             )
         )
-        
+        .map(mask_clouds)
     )
 
     image = images.median()
