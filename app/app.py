@@ -234,7 +234,7 @@ ndvi_map = ndvi.getMapId({
         
         
         
-        "7f7f7f",
+        
         "a6611a",
         "dfc27d",
         "f5f5f5",
@@ -277,7 +277,7 @@ to right,
 
 
 
-#7f7f7f,
+
 #a6611a,
 #dfc27d,
 #f5f5f5,
