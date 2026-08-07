@@ -199,7 +199,7 @@ if uploaded_area is not None:
             "fillColor": "green",
             "color": "green",
             "weight": 1,
-            "fillOpacity": 0.3
+            "fillOpacity": 0
         }
     ).add_to(m)
 
