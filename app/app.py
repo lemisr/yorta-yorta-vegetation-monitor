@@ -256,11 +256,11 @@ legend_html = """
 position: fixed;
 bottom: 30px;
 left: 30px;
-width: 240px;
+width: 260px;
 background-color: none;
 border:2px solid grey;
 z-index:9999;
-font-size:8px;
+font-size:9px;
 padding:7px;
 ">
 
