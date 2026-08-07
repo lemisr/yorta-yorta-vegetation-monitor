@@ -356,8 +356,41 @@ if map_data and map_data["all_drawings"]:
         .rename("NDVI")
         .clip(selected_aoi)
     )    
-                 
 
+    selected_ndvi_map = selected_ndvi.getMpld({
+        "min":-1,
+        "max":1,
+        "palette":[
+            "7f7f7f",
+            "a6611a",
+            "dfc27d",
+            "f5f5f5",
+            "a6d96a",
+            "1a9850",
+            "006837"
+        ]
+    })
+
+    #Ajouter couche NDVI à la carte
+    folium.TileLayer(
+
+tiles = selected_ndvi_map[tile_fetcher"].url_format,
+        attr = "Google Earth Engine",
+            name = "NDVI drawn area",
+            overlay = True
+            control = True
+    ).add_to(m)
+
+    st.success("NDVI calculated on drawn area")
+            
+
+    #Reafficher la carte avec NDVI
+    st_folium(
+        m,
+        width = 1000,
+        height = 700
+    )    
+    
     # Vérifier projection
     if selected_area.crs != boundary.crs:
         selected_area = selected_area.to_crs(boundary.crs)
