@@ -344,7 +344,7 @@ if map_data and map_data["all_drawings"]:
         .filterBounds(selected_aoi)
         .filter(
             ee.Filter.lt(
-                "ClOUDY_PIXEL_PERCENTAGE",
+                "CLOUDY_PIXEL_PERCENTAGE",
                 20
             )
         )
