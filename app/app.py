@@ -44,10 +44,10 @@ def geopandas_to_ee(geodataframe):
 def mask_clouds(image):
     scl = image.slect("SCL")
     mask = (
-        scl.eq(4)
-        .Or(scl.eq(5))
-        .Or(scl.eq(6))
-        .Or(scl.eq(7))
+        scl.eq(8)
+        .And(scl.eq(9))
+        .And(scl.eq(10))
+        .And(scl.eq(11))
     )    
     return image.updateMask(mask)
 
