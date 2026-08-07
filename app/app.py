@@ -256,12 +256,8 @@ legend_html = """
 position: fixed;
 bottom: 30px;
 left: 30px;
-width: 100px;
-background-color: white;
-border:2px solid grey;
-z-index:9999;
-font-size:14px;
-padding:10px;
+width: 240px;
+
 ">
 
 <b>Vegetation density (NDVI)</b><br><br>
