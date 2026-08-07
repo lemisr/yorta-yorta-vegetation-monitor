@@ -111,7 +111,7 @@ if uploaded_area is not None:
                 20
             )
         )
-        
+        .map(mask-clouds)
     )
 
     image = images.median()
