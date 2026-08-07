@@ -118,8 +118,8 @@ if uploaded_area is not None:
     )
 ndvi_mean = ndvi.reduceRegion(
     reducer = ee.Reducer.mean(),
-    geometry = aoi
-    scale = 10
+    geometry = aoi,
+    scale = 10,
     maxPixels = 1e9
 )
 
