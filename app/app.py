@@ -257,7 +257,11 @@ position: fixed;
 bottom: 30px;
 left: 30px;
 width: 240px;
-
+background-color: none;
+border:2px solid grey;
+z-index:9999;
+font-size:8px;
+padding:5px;
 ">
 
 <b>Vegetation density (NDVI)</b><br><br>
