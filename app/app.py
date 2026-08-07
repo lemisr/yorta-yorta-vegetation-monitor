@@ -245,13 +245,14 @@ if uploaded_area is not None:
     
 
 
-folium.TileLayer(
-    tiles=ndvi_map["tile_fetcher"].url_format,
+    folium.TileLayer(
+        tiles=ndvi_map["tile_fetcher"].url_format,
     attr="Google Earth Engine",
     name="NDVI 2025",
     overlay=True,
     control=True
 ).add_to(m)
+    
 
 legend_html = """
 <div style="
