@@ -375,7 +375,7 @@ if map_data and map_data["all_drawings"]:
     #Ajouter couche NDVI à la carte
     folium.TileLayer(
 
-tiles = selected_ndvi_map[tile_fetcher"].url_format,
+tiles = selected_ndvi_map["tile_fetcher"].url_format,
         attr = "Google Earth Engine",
             name = "NDVI drawn area",
             overlay = True
