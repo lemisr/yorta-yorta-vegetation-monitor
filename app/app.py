@@ -116,10 +116,19 @@ if uploaded_area is not None:
         .rename("NDVI")
         .clip(aoi)
     )
+ndvi_mean = ndvi.reduceRegion(
+    reducer = ee.Reducer.mean(),
+    geometry = aoi
+    scale = 10
+    maxPixels = 1e9
+)
 
-        
+mean_value = ndvi_mean.get("NDVI").getInfo()        
     
-
+st.metric(
+    "Mean NDVI"
+    round(mean_value,3)
+)    
 
     count = images.size().getInfo()
 
