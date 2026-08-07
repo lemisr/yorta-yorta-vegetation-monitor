@@ -343,7 +343,8 @@ if map_data and map_data["all_drawings"]:
                 20
             )
         )
-    )    
+    )
+    selected_image = selected_images.median()
 
     # Vérifier projection
     if selected_area.crs != boundary.crs:
