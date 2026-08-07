@@ -126,7 +126,7 @@ ndvi_mean = ndvi.reduceRegion(
 mean_value = ndvi_mean.get("NDVI").getInfo()        
     
 st.metric(
-    "Mean NDVI"
+    "Mean NDVI",
     round(mean_value,3)
 )    
 
