@@ -256,8 +256,7 @@ legend_html = """
 position: fixed;
 bottom: 30px;
 left: 30px;
-width: 220px;
-height: 80px;
+width: 260px;
 background-color: white;
 border:2px solid grey;
 z-index:9999;
@@ -265,14 +264,33 @@ font-size:14px;
 padding:10px;
 ">
 
-<b>Vegetation density</b><br>
+<b>Vegetation density (NDVI)</b><br><br>
 
-<span style="color:#d73027;">Low</span>
-────────
-<span style="color:#1a9850;">High</span>
+<div style="
+height: 20px;
+width: 240px;
+background: linear-gradient(
+to right,
+#d73027,
+#fc8d59,
+#fee08b,
+#91cf60,
+#1a9850
+);
+">
+</div>
+
+<div style="
+display:flex;
+justify-content:space-between;
+font-size:12px;
+">
+<span>Low</span>
+<span>High</span>
+</div>
 
 <br>
-NDVI 0 → 1
+NDVI range: 0 - 1
 
 </div>
 """
