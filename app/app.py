@@ -351,7 +351,7 @@ if map_data and map_data["all_drawings"]:
         .subtract(selected_image.select("B4"))
         .divide(
             selected_image.select("B8")
-            .add(selected_image.slect("B4"))
+            .add(selected_image.select("B4"))
         )
         .rename("NDVI")
         .clip(selected_aoi)
