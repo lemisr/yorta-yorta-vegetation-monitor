@@ -231,11 +231,15 @@ ndvi_map = ndvi.getMapId({
     "min": 0,
     "max": 1,
     "palette": [
-        "8c510a",
-        "d8b365",
-        "f6e8c3",
+        
+        
+        
+        "1b7837",
         "7fbf7b",
-        "1b7837"
+        "f6e8c3",
+        "d8b365",
+        "8c510a"
+        
     ]
 })
 
