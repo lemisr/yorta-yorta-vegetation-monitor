@@ -347,7 +347,7 @@ if map_data and map_data["all_drawings"]:
     selected_image = selected_images.median()
 
     selected_ndvi = (
-        selected_images.select("B8")
+        selected_image.select("B8")
         .subtract(selected_image.select("B4"))
         .divide(
             selected_image.select("B8")
