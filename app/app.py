@@ -120,7 +120,8 @@ if uploaded_area is not None:
 
     count = images.size().getInfo()
 
-    st.success(f"✅ Earth Engine connected - Sentinel images found: {count}")
+    st.success(f"✅ Earth Engine connected - Sentinel images found: {count}"
+    )           
 
    
 
