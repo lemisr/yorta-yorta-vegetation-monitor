@@ -127,7 +127,7 @@ if uploaded_area is not None:
     
     st.metric(
     "Mean NDVI",
-    round(mean_value,3)
+    round(mean_value, 3)
     )    
 
     count = images.size().getInfo()
