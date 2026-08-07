@@ -362,7 +362,7 @@ if map_data and map_data["all_drawings"]:
         .clip(selected_aoi)
     )    
 
-    selected_ndvi_map = selected_ndvi.getMapId({
+    selected_ndvi_map = ndvi.getMapId({
         "min":-1,
         "max":1,
         "palette":[
