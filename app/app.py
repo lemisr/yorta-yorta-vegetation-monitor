@@ -346,6 +346,18 @@ if map_data and map_data["all_drawings"]:
     )
     selected_image = selected_images.median()
 
+    selected_ndvi = (
+        selected_images.select("B8")
+        .subtract(selected_image.select("B4"))
+        .divide(
+            selected_image.select("B8")
+            .add(selected_image.slect("B4"))
+        )
+        .rename("NDVI")
+        .clip(selected_aoi)
+    )    
+                 
+
     # Vérifier projection
     if selected_area.crs != boundary.crs:
         selected_area = selected_area.to_crs(boundary.crs)
