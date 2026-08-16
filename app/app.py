@@ -1,5 +1,10 @@
+import io
 import json
+import os
+import tempfile
+import zipfile
 
+import pandas as pd
 import streamlit as st
 import geopandas as gpd
 import folium
@@ -32,6 +37,10 @@ EARLY_START, EARLY_END, EARLY_LABEL = "2017-01-01", "2017-12-31", "2017"
 CLOUD_PCT_S2 = 20
 
 BOUNDARY_PATH = "data/raw/app_boundary.geojson"
+
+# Sites culturels : rayon de buffer et seuil de "perte significative"
+SITE_BUFFER_METERS = 1000
+LOSS_THRESHOLD = -0.1  # dNDVI < -0.1 = perte de végétation jugée significative
 
 
 # =========================================================
@@ -68,6 +77,106 @@ def geom_signature(geom_dict):
     return json.dumps(geom_dict, sort_keys=True)
 
 
+def shapely_to_ee(geom):
+    """Convertit une géométrie shapely (WGS84) en ee.Geometry."""
+    geojson = json.loads(gpd.GeoSeries([geom], crs="EPSG:4326").to_json())
+    return ee.Geometry(geojson["features"][0]["geometry"])
+
+
+# ---- Import des sites culturels (KML / SHP zippé / CSV) ----
+def _read_kml_bytes(file_bytes):
+    with tempfile.NamedTemporaryFile(suffix=".kml", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+    try:
+        gdf = gpd.read_file(tmp_path, driver="KML")
+    finally:
+        os.unlink(tmp_path)
+    return gdf
+
+
+def _read_shp_zip_bytes(file_bytes):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        zip_path = os.path.join(tmp_dir, "sites.zip")
+        with open(zip_path, "wb") as f:
+            f.write(file_bytes)
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(tmp_dir)
+        shp_files = [f for f in os.listdir(tmp_dir) if f.lower().endswith(".shp")]
+        if not shp_files:
+            raise ValueError("No .shp file found inside the zip archive.")
+        gdf = gpd.read_file(os.path.join(tmp_dir, shp_files[0])).copy()
+    return gdf
+
+
+def _read_csv_bytes(file_bytes):
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    cols_lower = {c.lower(): c for c in df.columns}
+
+    lat_col = next((cols_lower[c] for c in cols_lower if c in ("lat", "latitude", "y")), None)
+    lon_col = next(
+        (cols_lower[c] for c in cols_lower if c in ("lon", "long", "longitude", "x")), None
+    )
+    if lat_col is None or lon_col is None:
+        raise ValueError(
+            "CSV must contain latitude/longitude columns "
+            "(lat/latitude/y and lon/long/longitude/x)."
+        )
+
+    return gpd.GeoDataFrame(
+        df, geometry=gpd.points_from_xy(df[lon_col], df[lat_col]), crs="EPSG:4326"
+    )
+
+
+@st.cache_data(show_spinner=False)
+def parse_sites_file(file_bytes, filename):
+    """Parse un fichier de points (KML, SHP zippé ou CSV lat/lon) -> GeoDataFrame de Points en EPSG:4326."""
+    ext = filename.lower().split(".")[-1]
+    if ext == "kml":
+        gdf = _read_kml_bytes(file_bytes)
+    elif ext == "zip":
+        gdf = _read_shp_zip_bytes(file_bytes)
+    elif ext == "csv":
+        gdf = _read_csv_bytes(file_bytes)
+    else:
+        raise ValueError(f"Unsupported file type: .{ext}")
+
+    gdf = gdf[gdf.geometry.geom_type == "Point"].copy()
+    if gdf.empty:
+        raise ValueError("No point geometries found in the uploaded file.")
+
+    if gdf.crs is None:
+        gdf.set_crs("EPSG:4326", inplace=True)
+    elif gdf.crs.to_epsg() != 4326:
+        gdf = gdf.to_crs("EPSG:4326")
+
+    return gdf.reset_index(drop=True)
+
+
+def site_label_column(gdf):
+    """Devine la colonne de nom du site, sinon None."""
+    for candidate in ("name", "nom", "site", "label", "Name", "NOM"):
+        if candidate in gdf.columns:
+            return candidate
+    return None
+
+
+def utm_epsg_for(lon, lat):
+    """EPSG UTM adapté à la position (pour un buffer en mètres correct)."""
+    zone = int((lon + 180) // 6) + 1
+    return f"EPSG:{32600 + zone}" if lat >= 0 else f"EPSG:{32700 + zone}"
+
+
+def buffer_points_1km(points_gdf, meters=SITE_BUFFER_METERS):
+    """Buffer en mètres autour de chaque point, reprojection UTM automatique."""
+    centroid = points_gdf.geometry.unary_union.centroid
+    utm_crs = utm_epsg_for(centroid.x, centroid.y)
+    points_utm = points_gdf.to_crs(utm_crs)
+    buffers_utm = points_utm.copy()
+    buffers_utm["geometry"] = points_utm.geometry.buffer(meters)
+    return buffers_utm.to_crs("EPSG:4326")
+
+
 @st.cache_data(ttl=3600, show_spinner=False)
 def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct):
     aoi = ee.Geometry(json.loads(aoi_geojson_str))
@@ -86,10 +195,8 @@ def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct):
     return tile["tile_fetcher"].url_format, n
 
 
-@st.cache_data(ttl=3600, show_spinner=False)
-def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end):
-    aoi = ee.Geometry(json.loads(aoi_geojson_str))
-
+def _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end):
+    """Image dNDVI (recent - early) Sentinel-2, clippée à aoi. None si pas d'images."""
     early_coll = (
         ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterDate(early_start, early_end)
@@ -107,9 +214,30 @@ def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent
 
     early_ndvi = early_coll.median().normalizedDifference(["B8", "B4"]).rename("NDVI")
     recent_ndvi = recent_coll.median().normalizedDifference(["B8", "B4"]).rename("NDVI")
+    return recent_ndvi.subtract(early_ndvi).rename("dNDVI").clip(aoi)
 
-    diff = recent_ndvi.subtract(early_ndvi).rename("dNDVI").clip(aoi)
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end):
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
+    if diff is None:
+        return None
     tile = diff.getMapId({"min": -0.4, "max": 0.4, "palette": DIFF_PALETTE})
+    return tile["tile_fetcher"].url_format
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def vegetation_loss_tile(
+    aoi_geojson_str, early_start, early_end, recent_start, recent_end, threshold
+):
+    """Masque rouge : pixels où dNDVI < threshold (perte significative), clippé à aoi."""
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
+    if diff is None:
+        return None
+    loss_mask = diff.lt(threshold).selfMask()
+    tile = loss_mask.getMapId({"palette": ["ff0000"], "min": 0, "max": 1})
     return tile["tile_fetcher"].url_format
 
 
@@ -144,7 +272,7 @@ def legend_html(title, low_label, high_label, palette, bottom):
 # ETAT
 # =========================================================
 if "drawn_geom" not in st.session_state:
-    st.session_state.drawn_geom = None # dict GeoJSON, validé et dans la limite
+    st.session_state.drawn_geom = None  # dict GeoJSON, validé et dans la limite
 if "drawn_invalid_msg" not in st.session_state:
     st.session_state.drawn_invalid_msg = None
 
@@ -156,6 +284,12 @@ st.title("🌿 Yorta Yorta Vegetation Monitor")
 st.write("Interactive vegetation monitoring application using GIS and remote sensing.")
 
 uploaded_file = st.file_uploader("Upload your analysis area (GeoJSON)", type=["geojson"])
+
+st.subheader("🏛️ Cultural / heritage sites")
+uploaded_sites_file = st.file_uploader(
+    "Upload site locations (KML, zipped Shapefile, or CSV with lat/lon columns)",
+    type=["kml", "zip", "csv"],
+)
 
 col_a, col_b = st.columns([1, 5])
 with col_a:
@@ -173,7 +307,7 @@ boundary_geom = boundary.geometry.iloc[0]
 # DETERMINER L'AOI ACTIVE (upload prioritaire, sinon dessin validé)
 # =========================================================
 active_gdf = None
-active_source = None # "upload" | "draw"
+active_source = None  # "upload" | "draw"
 
 if uploaded_file is not None:
     uploaded_area = gpd.read_file(uploaded_file)
@@ -228,6 +362,52 @@ if active_gdf is not None:
 
 
 # =========================================================
+# SITES CULTURELS : parsing, buffer 1km, masque de perte NDVI
+# =========================================================
+sites_gdf = None
+buffers_gdf = None
+tile_loss = None
+site_name_col = None
+
+if uploaded_sites_file is not None:
+    try:
+        raw_gdf = parse_sites_file(
+            uploaded_sites_file.getvalue(), uploaded_sites_file.name
+        )
+
+        # On ne garde que les sites dans la limite de l'application (évite tout crash EE)
+        inside_mask = raw_gdf.within(boundary_geom)
+        excluded = int((~inside_mask).sum())
+        sites_gdf = raw_gdf[inside_mask].reset_index(drop=True)
+
+        if excluded:
+            st.warning(f"{excluded} site(s) outside the application boundary were ignored.")
+
+        if sites_gdf.empty:
+            st.error("❌ No site is inside the application boundary.")
+            sites_gdf = None
+        else:
+            site_name_col = site_label_column(sites_gdf)
+            buffers_gdf = buffer_points_1km(sites_gdf)
+            st.success(f"✅ {len(sites_gdf)} site(s) loaded, {SITE_BUFFER_METERS} m buffer applied")
+
+    except Exception as e:
+        st.error(f"Could not read the sites file: {e}")
+
+if buffers_gdf is not None:
+    try:
+        buffer_union_ee = shapely_to_ee(buffers_gdf.geometry.unary_union)
+        buffer_geojson_str = json.dumps(buffer_union_ee.getInfo())
+        tile_loss = vegetation_loss_tile(
+            buffer_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END, LOSS_THRESHOLD
+        )
+        if tile_loss is None:
+            st.warning("Not enough cloud-free Sentinel-2 images to assess vegetation loss around these sites.")
+    except Exception as e:
+        st.error(f"Earth Engine computation failed for site buffers: {e}")
+
+
+# =========================================================
 # CONSTRUCTION DE LA CARTE (une seule fois)
 # =========================================================
 bounds = boundary.total_bounds
@@ -271,6 +451,34 @@ if tile_early:
 if tile_diff:
     add_tile_layer(m, tile_diff, f"Vegetation change {EARLY_LABEL} → {RECENT_LABEL}", show=False)
 
+if buffers_gdf is not None:
+    folium.GeoJson(
+        buffers_gdf[["geometry"]].to_json(),
+        name=f"Site buffers ({SITE_BUFFER_METERS} m)",
+        style_function=lambda x: {
+            "color": "orange",
+            "weight": 2,
+            "dashArray": "4",
+            "fillOpacity": 0,
+        },
+    ).add_to(m)
+
+    for i, row in sites_gdf.iterrows():
+        label = str(row[site_name_col]) if site_name_col else f"Site {i + 1}"
+        folium.CircleMarker(
+            location=[row.geometry.y, row.geometry.x],
+            radius=5,
+            color="orange",
+            fill=True,
+            fill_color="orange",
+            fill_opacity=1,
+            popup=label,
+            tooltip=label,
+        ).add_to(m)
+
+if tile_loss:
+    add_tile_layer(m, tile_loss, "Vegetation loss near sites (dNDVI < %.2f)" % LOSS_THRESHOLD, show=True)
+
 draw = Draw(
     export=True,
     draw_options={
@@ -284,7 +492,7 @@ draw = Draw(
 )
 draw.add_to(m)
 
-if tile_recent or tile_early or tile_diff:
+if tile_recent or tile_early or tile_diff or tile_loss:
     folium.LayerControl(collapsed=False).add_to(m)
 else:
     folium.LayerControl().add_to(m)
@@ -299,6 +507,18 @@ if tile_diff:
     m.get_root().html.add_child(folium.Element(
         legend_html(f"Change {EARLY_LABEL}→{RECENT_LABEL}", "Loss", "Gain", DIFF_PALETTE, bottom=140)
     ))
+if tile_loss:
+    loss_legend = f"""
+    <div style="position: fixed; bottom: 250px; left: 30px; width: 260px;
+                background-color: white; border:2px solid grey; z-index:9999;
+                font-size:11px; padding:7px;">
+      <b>Sites — vegetation loss</b><br><br>
+      <span style="display:inline-block; width:14px; height:14px;
+                   background:#ff0000; margin-right:6px;"></span>
+      dNDVI &lt; {LOSS_THRESHOLD} within {SITE_BUFFER_METERS} m buffer
+    </div>
+    """
+    m.get_root().html.add_child(folium.Element(loss_legend))
 
 
 # =========================================================
