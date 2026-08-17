@@ -27,12 +27,12 @@ NDVI_PALETTE = ["7f7f7f", "a6611a", "dfc27d", "f5f5f5", "a6d96a", "1a9850", "006
 DIFF_PALETTE = ["67001f", "d73027", "fee08b", "ffffff", "d9ef8b", "1a9850", "00441b"]
 
 # Période "récente" -> Sentinel-2 SR (bonne couverture / qualité)
-RECENT_START, RECENT_END, RECENT_LABEL = "2025-05-01", "2025-09-31", "2025"
+RECENT_START, RECENT_END, RECENT_LABEL = "2025-05-01", "2025-09-30", "2025"
 
 # Période "historique" -> Sentinel-2 SR aussi.
 # 2017 est la première année où COPERNICUS/S2_SR_HARMONIZED a une
 # couverture globale fiable (le catalogue SR ne remonte pas à 2016).
-EARLY_START, EARLY_END, EARLY_LABEL = "2017-05-01", "2017-09-31", "2017"
+EARLY_START, EARLY_END, EARLY_LABEL = "2017-05-01", "2017-09-30", "2017"
 
 CLOUD_PCT_S2 = 20
 
