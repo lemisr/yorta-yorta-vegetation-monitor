@@ -189,7 +189,7 @@ def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct):
     n = coll.size().getInfo()
     if n == 0:
         return None, 0
-    image = coll.median()
+    image = coll.mean()
     ndvi = image.normalizedDifference(["B8", "B4"]).rename("NDVI").clip(aoi)
     tile = ndvi.getMapId({"min": -1, "max": 1, "palette": NDVI_PALETTE})
     return tile["tile_fetcher"].url_format, n
@@ -212,8 +212,8 @@ def _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end):
     if early_coll.size().getInfo() == 0 or recent_coll.size().getInfo() == 0:
         return None
 
-    early_ndvi = early_coll.median().normalizedDifference(["B8", "B4"]).rename("NDVI")
-    recent_ndvi = recent_coll.median().normalizedDifference(["B8", "B4"]).rename("NDVI")
+    early_ndvi = early_coll.mean().normalizedDifference(["B8", "B4"]).rename("NDVI")
+    recent_ndvi = recent_coll.mean().normalizedDifference(["B8", "B4"]).rename("NDVI")
     return recent_ndvi.subtract(early_ndvi).rename("dNDVI").clip(aoi)
 
 
