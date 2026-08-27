@@ -1,100 +1,235 @@
+import io
+import json
+import os
+import tempfile
+import zipfile
+import pandas as pd
 import streamlit as st
-import ee
+import geopandas as gpd
 import folium
+import ee
 from streamlit_folium import st_folium
+from shapely.geometry import shape, box
+from folium.plugins import Draw
+from google.oauth2 import service_account
 
-# Configuration de la page Streamlit
-st.set_page_config(layout="wide")
-st.title("Moniteur de Végétation - Yorta Yorta")
+# =========================================================================
+# CONFIG
+# =========================================================================
+st.set_page_config(
+    page_title="Yorta Yorta Vegetation Monitor",
+    page_icon="🌿",
+    layout="wide",
+)
 
-# 1. INITIALISATION DE EARTH ENGINE
+NDVI_PALETTE = ["7f7f7f", "a6611a", "dfc27d", "f5f5f5", "a6d96a", "1a9850", "006837"]
+DIFF_PALETTE = ["67001f", "d73027", "fee08b", "ffffff", "d9ef8b", "1a9850", "00441b"]
+
+# Fenêtre phénologique appliquée chaque année (pic de végétation, comparabilité interannuelle)
+MONTH_START, MONTH_END = 5, 9  # mai à septembre
+
+# Sentinel-2 SR, composites sur 2 ans pour lisser la variabilité inter-annuelle
+RECENT_START, RECENT_END, RECENT_LABEL = "2024-01-01", "2025-12-31", "2024–2025"
+EARLY_START, EARLY_END, EARLY_LABEL = "2019-01-01", "2020-12-31", "2019–2020"
+
+CLOUD_PCT_S2 = 40  # filtre scène large : le masquage fin se fait ensuite via SCL au pixel
+BOUNDARY_PATH = "data/raw/app_boundary.geojson"
+
+# Sites culturels : rayon de buffer et seuil de "perte significative"
+SITE_BUFFER_METERS = 1000
+LOSS_THRESHOLD = -0.1  # dNDVI < -0.1 = perte de végétation jugée significative
+
+# =========================================================================
+# EARTH ENGINE INIT (une seule fois par session)
+# =========================================================================
+@st.cache_resource(show_spinner=False)
+def init_ee():
+    credentials = service_account.Credentials.from_service_account_info(
+        dict(st.secrets["earthengine"]),
+        scopes=["https://googleapis.com"],
+    )
+    ee.Initialize(credentials, project=st.secrets["earthengine"]["project_id"])
+    return True
+
 try:
-    ee.Initialize()
+    init_ee()
 except Exception as e:
-    st.error("Veuillez authentifier Google Earth Engine.")
+    st.error(f"Earth Engine connection failed: {e}")
+    st.stop()
 
-# Définissez votre zone d'étude (Région Yorta Yorta, Australie)
-roi = ee.Geometry.Point([145.0, -36.0]).buffer(20000) 
+# =========================================================================
+# HELPERS
+# =========================================================================
+def geopandas_to_ee(gdf):
+    """Convertit la géométrie d'un GeoDataFrame (1 feature) en ee.Geometry."""
+    geojson = json.loads(gdf[["geometry"]].to_json())
+    return ee.Geometry(geojson["features"][0]["geometry"])
 
-# Périodes
-debut_P1, fin_P1 = '2019-01-01', '2020-12-31'
-debut_P2, fin_P2 = '2024-01-01', '2025-12-31'
+def geom_signature(geom_dict):
+    """Signature stable d'une géométrie GeoJSON (dict) pour détecter un changement."""
+    return json.dumps(geom_dict, sort_keys=True)
 
-# Fonction Cloud Mask Sentinel-2
-def maskS2clouds(image):
-    qa = image.select('QA60')
-    mask = qa.bitwiseAnd(1 << 10).eq(0).And(qa.bitwiseAnd(1 << 11).eq(0))
-    return image.updateMask(mask).divide(10000).copyProperties(image, ["system:time_start"])
+def shapely_to_ee(geom):
+    """Convertit une géométrie shapely (WGS84) en ee.Geometry."""
+    geojson = json.loads(gpd.GeoSeries([geom], crs="EPSG:4326").to_json())
+    return ee.Geometry(geojson["features"][0]["geometry"])
 
-# Fonction pour calculer le NDVI
-def addNDVI(image):
-    ndvi = image.normalizedDifference(['B8', 'B4']).rename('NDVI')
-    return image.addBands(ndvi)
+# ---- Import des sites culturels (KML / SHP zippé / CSV) ----
+def _read_kml_bytes(file_bytes):
+    with tempfile.NamedTemporaryFile(suffix=".kml", delete=False) as tmp:
+        tmp.write(file_bytes)
+        tmp_path = tmp.name
+    try:
+        gdf = gpd.read_file(tmp_path, driver="KML")
+    finally:
+        os.unlink(tmp_path)
+    return gdf
 
-# 2. CHARGEMENT DES COLLECTIONS
-collection_P1 = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-                 .filterBounds(roi).filterDate(debut_P1, fin_P1)
-                 .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
-                 .map(maskS2clouds).map(addNDVI))
+def _read_shp_zip_bytes(file_bytes):
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        zip_path = os.path.join(tmp_dir, "sites.zip")
+        with open(zip_path, "wb") as f:
+            f.write(file_bytes)
+        with zipfile.ZipFile(zip_path) as z:
+            z.extractall(tmp_dir)
+        shp_files = [f for f in os.listdir(tmp_dir) if f.lower().endswith(".shp")]
+        if not shp_files:
+            raise ValueError("No .shp file found inside the zip archive.")
+        gdf = gpd.read_file(os.path.join(tmp_dir, shp_files[0])).copy()
+    return gdf
 
-collection_P2 = (ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
-                 .filterBounds(roi).filterDate(debut_P2, fin_P2)
-                 .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 20))
-                 .map(maskS2clouds).map(addNDVI))
+def _read_csv_bytes(file_bytes):
+    df = pd.read_csv(io.BytesIO(file_bytes))
+    cols_lower = {c.lower(): c for c in df.columns}
+    lat_col = next((cols_lower[c] for c in cols_lower if c in ("lat", "latitude", "y")), None)
+    lon_col = next((cols_lower[c] for c in cols_lower if c in ("lon", "long", "longitude", "x")), None)
+    if lat_col is None or lon_col is None:
+        raise ValueError("CSV must contain latitude/longitude columns (lat/latitude/y and lon/long/longitude/x).")
+    return gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df[lon_col], df[lat_col]), crs="EPSG:4326")
 
-# 3. CRÉATION DU MASQUE FORESTIER ULTRA-STRICT
-ndvi_std_P1 = collection_P1.select('NDVI').reduce(ee.Reducer.stdDev())
-ndvi_median_P1 = collection_P1.select('NDVI').median()
-ndvi_min_P1 = collection_P1.select('NDVI').reduce(ee.Reducer.min())
+@st.cache_data(show_spinner=False)
+def parse_sites_file(file_bytes, filename):
+    """Parse un fichier de points (KML, SHP zippé ou CSV lat/lon) -> GeoDataFrame de Points en EPSG:4326."""
+    ext = filename.lower().split(".")[-1]
+    if ext == "kml":
+        gdf = _read_kml_bytes(file_bytes)
+    elif ext == "zip":
+        gdf = _read_shp_zip_bytes(file_bytes)
+    elif ext == "csv":
+        gdf = _read_csv_bytes(file_bytes)
+    else:
+        raise ValueError(f"Unsupported file type: .{ext}")
+    
+    gdf = gdf[gdf.geometry.geom_type == "Point"].copy()
+    if gdf.empty:
+        raise ValueError("No point geometries found in the uploaded file.")
+    if gdf.crs is None:
+        gdf.set_crs("EPSG:4326", inplace=True)
+    elif gdf.crs.to_epsg() != 4326:
+        gdf = gdf.to_crs("EPSG:4326")
+    return gdf.reset_index(drop=True)
 
-masqueForetSentinel = (ndvi_std_P1.lt(0.05)
-                       .And(ndvi_median_P1.gt(0.70))
-                       .And(ndvi_min_P1.gt(0.50)).clip(roi))
+def site_label_column(gdf):
+    """Devine la colonne de nom du site, sinon None."""
+    for candidate in ("name", "nom", "site", "label", "Name", "NOM"):
+        if candidate in gdf.columns:
+            return candidate
+    return None
 
-# 4. GÉNÉRATION DES COMPOSITES
-s2_P2_median = collection_P2.median().clip(roi)
-ndvi_P1_foret = collection_P1.median().clip(roi).select('NDVI').updateMask(masqueForetSentinel)
-ndvi_P2_foret = s2_P2_median.select('NDVI').updateMask(masqueForetSentinel)
+def utm_epsg_for(lon, lat):
+    """EPSG UTM adapté à la position (pour un buffer en mètres correct)."""
+    zone = int((lon + 180) // 6) + 1
+    return f"EPSG:{32600 + zone}" if lat >= 0 else f"EPSG:{32700 + zone}"
 
-# 5. CALCUL DU CHANGEMENT
-changementNDVI = ndvi_P2_foret.subtract(ndvi_P1_foret).rename('Changement')
+def buffer_points_1km(points_gdf, meters=SITE_BUFFER_METERS):
+    """Buffer en mètres autour de chaque point, reprojection UTM automatique."""
+    centroid = points_gdf.geometry.unary_union.centroid
+    utm_crs = utm_epsg_for(centroid.x, centroid.y)
+    points_utm = points_gdf.to_crs(utm_crs)
+    buffers_utm = points_utm.copy()
+    buffers_utm["geometry"] = points_utm.geometry.buffer(meters)
+    return buffers_utm.to_crs("EPSG:4326")
 
-# 6. CONFIGURATION DE LA CARTE FOLIUM NATIVE
-# Coordonnées pour centrer la carte (Yorta Yorta)
-m = folium.Map(location=[-36.0, 145.0], zoom_start=10, tiles="OpenStreetMap")
+def mask_s2_scl(img):
+    """Masque nuages / ombres / cirrus / pixels défectueux via la bande SCL."""
+    scl = img.select("SCL")
+    good = scl.eq(4).Or(scl.eq(5)).Or(scl.eq(6)).Or(scl.eq(7))  # végétation, sol nu, eau, non classé
+    return img.updateMask(good)
 
-# Ajouter un fond de carte Satellite (Google Hybrid) sans passer par geemap
-folium.TileLayer(
-    tiles="https://google.com{x}&y={y}&z={z}",
-    attr="Google",
-    name="Google Satellite (Hybrid)",
-    overlay=False,
-    control=True
-).add_to(m)
+def sentinel2_ndvi_image(aoi, start, end, cloud_pct=CLOUD_PCT_S2):
+    """Composite NDVI médian Sentinel-2, filtré pour exclure l'agriculture
+    en ne gardant que la forêt stable et dense (basse variabilité, haut minimum)."""
+    coll = (
+        ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterDate(start, end)
+        .filter(ee.Filter.calendarRange(MONTH_START, MONTH_END, "month"))
+        .filterBounds(aoi)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", cloud_pct))
+        .map(mask_s2_scl)
+    )
+    
+    n = coll.size().getInfo()
+    if n == 0:
+        return None, 0
+    
+    # 1. Calculer le NDVI pour chaque image de la collection temporelle
+    def compute_collection_ndvi(img):
+        return img.normalizedDifference(["B8", "B4"]).rename("NDVI")
+        
+    ndvi_collection = coll.map(compute_collection_ndvi)
+    
+    # 2. Calculer les statistiques temporelles pour repérer l'agriculture
+    ndvi_median = ndvi_collection.median()
+    ndvi_std = ndvi_collection.reduce(ee.Reducer.stdDev())
+    ndvi_min = ndvi_collection.reduce(ee.Reducer.min())
+    
+    # 3. Créer le masque de forêt ultra-strict :
+    # - ndvi_std.lt(0.06)    -> Élimine les cultures car elles varient beaucoup (stdDev élevé)
+    # - ndvi_median.gt(0.65) -> Sélectionne la vraie forêt dense
+    # - ndvi_min.gt(0.45)    -> Élimine les cultures après récolte, coupe ou labour
+    masque_foret = (ndvi_std.lt(0.06)
+                    .And(ndvi_median.gt(0.65))
+                    .And(ndvi_min.gt(0.45)))
+    
+    # 4. Appliquer le masque sur le composite médian final
+    ndvi_final = ndvi_median.updateMask(masque_foret).rename("NDVI").clip(aoi)
+    
+    return ndvi_final, n
 
-# Fonction pour obtenir l'URL de la couche Earth Engine
-def add_ee_layer(ee_image_object, vis_params, name):
-    map_id_dict = ee.Image(ee_image_object).getMapId(vis_params)
-    folium.raster_layers.TileLayer(
-        tiles=map_id_dict['tile_fetcher'].url_format,
-        attr='Google Earth Engine',
-        name=name,
-        overlay=True,
-        control=True
-    ).add_to(m)
+@st.cache_data(ttl=3600, show_spinner=False)
+def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct):
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    ndvi, n = sentinel2_ndvi_image(aoi, start, end, cloud_pct)
+    if ndvi is None:
+        return None, 0
+    tile = ndvi.getMapId({"min": -1, "max": 1, "palette": NDVI_PALETTE})
+    return tile["tile_fetcher"].url_format, n
 
-# Paramètres de visualisation
-vis_ndvi = {'min': 0.5, 'max': 0.85, 'palette': ['#ece7f2', '#a6bddb', '#016450']}
-vis_changement = {'min': -0.15, 'max': 0.15, 'palette': ['#d73027', '#ffffff', '#1a9850']}
+def _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end):
+    """Image dNDVI (recent - early) Sentinel-2, clippée à aoi. None si pas d'images."""
+    early_ndvi, n_early = sentinel2_ndvi_image(aoi, early_start, early_end)
+    recent_ndvi, n_recent = sentinel2_ndvi_image(aoi, recent_start, recent_end)
+    if early_ndvi is None or recent_ndvi is None:
+        return None
+    return recent_ndvi.subtract(early_ndvi).rename("dNDVI").clip(aoi)
 
-# Ajout des couches Earth Engine sur la carte Folium
-add_ee_layer(s2_P2_median, {'bands': ['B4', 'B3', 'B2'], 'max': 0.3}, '1. Fond Sentinel-2 2024-2025')
-add_ee_layer(ndvi_P1_foret, vis_ndvi, '2. NDVI Forêt Stable (2019-2020)')
-add_ee_layer(ndvi_P2_foret, vis_ndvi, '3. NDVI Forêt Évolué (2024-2025)')
-add_ee_layer(changementNDVI, vis_changement, '4. Déforestation/Gain réel')
+@st.cache_data(ttl=3600, show_spinner=False)
+def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end):
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
+    if diff is None:
+        return None
+    tile = diff.getMapId({"min": -0.4, "max": 0.4, "palette": DIFF_PALETTE})
+    return tile["tile_fetcher"].url_format
 
-# Ajouter le sélecteur de couches
-folium.LayerControl().add_to(m)
-
-# Rendu dans Streamlit
-st_folium(m, width=1100, height=700)
+@st.cache_data(ttl=3600, show_spinner=False)
+def vegetation_loss_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end, threshold):
+    """Masque rouge : pixels où dNDVI < threshold (perte significative), clippé à aoi."""
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
+    if diff is None:
+        return None
+    loss_mask = diff.lt(threshold)
+    loss_image = diff.updateMask(loss_mask)
+    tile = loss_image.getMapId({"min": -0.4, "max": threshold, "palette": ["#ff0000", "#ff3333"]})
+    return tile["tile_fetcher"].url_format
