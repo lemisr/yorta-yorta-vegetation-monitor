@@ -39,8 +39,6 @@ CLOUD_PCT_S2 = 40  # filtre scène large : le masquage fin se fait ensuite via S
 
 BOUNDARY_PATH = "data/raw/app_boundary.geojson"
 
-# Sites culturels : rayon de buffer et seuil de "perte significative"
-SITE_BUFFER_METERS = 1000
 LOSS_THRESHOLD = -0.1  # dNDVI < -0.1 = perte de végétation jugée significative
 
 # Masque forêt : deux méthodes disponibles.
@@ -91,12 +89,6 @@ def geopandas_to_ee(gdf):
 def geom_signature(geom_dict):
     """Signature stable d'une géométrie GeoJSON (dict) pour détecter un changement."""
     return json.dumps(geom_dict, sort_keys=True)
-
-
-def shapely_to_ee(geom):
-    """Convertit une géométrie shapely (WGS84) en ee.Geometry."""
-    geojson = json.loads(gpd.GeoSeries([geom], crs="EPSG:4326").to_json())
-    return ee.Geometry(geojson["features"][0]["geometry"])
 
 
 # ---- Import des sites culturels (KML / SHP zippé / CSV) ----
@@ -175,22 +167,6 @@ def site_label_column(gdf):
         if candidate in gdf.columns:
             return candidate
     return None
-
-
-def utm_epsg_for(lon, lat):
-    """EPSG UTM adapté à la position (pour un buffer en mètres correct)."""
-    zone = int((lon + 180) // 6) + 1
-    return f"EPSG:{32600 + zone}" if lat >= 0 else f"EPSG:{32700 + zone}"
-
-
-def buffer_points_1km(points_gdf, meters=SITE_BUFFER_METERS):
-    """Buffer en mètres autour de chaque point, reprojection UTM automatique."""
-    centroid = points_gdf.geometry.unary_union.centroid
-    utm_crs = utm_epsg_for(centroid.x, centroid.y)
-    points_utm = points_gdf.to_crs(utm_crs)
-    buffers_utm = points_utm.copy()
-    buffers_utm["geometry"] = points_utm.geometry.buffer(meters)
-    return buffers_utm.to_crs("EPSG:4326")
 
 
 def mask_s2_scl(img):
@@ -332,6 +308,73 @@ def vegetation_loss_tile(
     return tile["tile_fetcher"].url_format
 
 
+@st.cache_data(ttl=3600, show_spinner=False)
+def forest_stats(aoi_geojson_str, forest_spec, threshold=LOSS_THRESHOLD):
+    """Statistiques simples (ha) : surface forêt de référence, surface perdue,
+    % perdu. Calculées côté serveur EE via reduceRegion (somme des surfaces pixel)."""
+    aoi = ee.Geometry(json.loads(aoi_geojson_str))
+    forest_mask = get_forest_mask(aoi, forest_spec)
+    if forest_mask is None:
+        return None
+
+    diff = _s2_ndvi_diff_image(aoi, EARLY_START, EARLY_END, RECENT_START, RECENT_END)
+    if diff is None:
+        return None
+    loss_mask = diff.lt(threshold).selfMask().updateMask(forest_mask)
+
+    pixel_area = ee.Image.pixelArea()
+    forest_area = pixel_area.updateMask(forest_mask).reduceRegion(
+        reducer=ee.Reducer.sum(), geometry=aoi, scale=10, maxPixels=1e13, bestEffort=True, tileScale=4,
+    ).get("area")
+    loss_area = pixel_area.updateMask(loss_mask).reduceRegion(
+        reducer=ee.Reducer.sum(), geometry=aoi, scale=10, maxPixels=1e13, bestEffort=True, tileScale=4,
+    ).get("area")
+
+    result = ee.Dictionary({"forest_area": forest_area, "loss_area": loss_area}).getInfo()
+    forest_ha = (result.get("forest_area") or 0) / 10000
+    loss_ha = (result.get("loss_area") or 0) / 10000
+    loss_pct = (loss_ha / forest_ha * 100) if forest_ha > 0 else 0
+    return {"forest_ha": forest_ha, "loss_ha": loss_ha, "loss_pct": loss_pct}
+
+
+def build_pdf_report(spec, stats, site_count):
+    """PDF simple : zone, méthode/seuil de masque forêt, dates comparées, stats.
+    Version 1 volontairement basique — pas de carte image ni tableau de sites."""
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import cm
+    from reportlab.pdfgen import canvas
+
+    buf = io.BytesIO()
+    c = canvas.Canvas(buf, pagesize=A4)
+    width, height = A4
+    y = height - 3 * cm
+
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(2 * cm, y, "Yorta Yorta Vegetation Monitor — Report")
+    y -= 1 * cm
+
+    c.setFont("Helvetica", 10)
+    method_label = "NDVI annual threshold" if spec[0] == "ndvi" else "Dynamic World tree probability"
+    lines = [
+        f"Period compared: {EARLY_LABEL} vs {RECENT_LABEL}",
+        f"Forest mask method: {method_label} (threshold {spec[1]})",
+        f"Loss threshold: dNDVI < {LOSS_THRESHOLD}",
+        f"Cultural/heritage sites loaded: {site_count}",
+        "",
+        f"Reference forest area ({EARLY_LABEL}): {stats['forest_ha']:.1f} ha",
+        f"Forest loss detected: {stats['loss_ha']:.1f} ha",
+        f"Loss as % of reference forest: {stats['loss_pct']:.1f}%",
+    ]
+    for line in lines:
+        c.drawString(2 * cm, y, line)
+        y -= 0.7 * cm
+
+    c.showPage()
+    c.save()
+    buf.seek(0)
+    return buf.read()
+
+
 def add_tile_layer(fmap, url, name, show=False):
     folium.TileLayer(
         tiles=url,
@@ -457,18 +500,20 @@ if st.session_state.drawn_invalid_msg:
 
 
 # =========================================================
-# CALCUL NDVI (si une AOI active et valide existe)
+# CALCUL NDVI + PERTE DE FORET (sur toute l'AOI, si une AOI active et valide existe)
 # Une entrée par seuil forêt actif (None = pas de masque, ou [0.5], [0.6], [0.5, 0.6])
 # =========================================================
-ndvi_layers = []  # liste de dicts : threshold, tile_recent, tile_early, tile_diff, n_recent, n_early
+ndvi_layers = []  # liste de dicts : spec, tile_recent, tile_early, tile_diff
+loss_layers = []  # liste de dicts : spec, tile_loss, color
 n_recent = n_early = 0
+aoi_geojson_str = None
 
 if active_gdf is not None:
     aoi_ee = geopandas_to_ee(active_gdf)
     aoi_geojson_str = json.dumps(aoi_ee.getInfo())
 
     try:
-        for spec in active_forest_specs:
+        for i, spec in enumerate(active_forest_specs):
             tile_recent, n_recent = sentinel2_ndvi_tile(
                 aoi_geojson_str, RECENT_START, RECENT_END, CLOUD_PCT_S2, forest_spec=spec
             )
@@ -484,6 +529,13 @@ if active_gdf is not None:
                 "tile_early": tile_early,
                 "tile_diff": tile_diff,
             })
+
+            color = LOSS_COLOR_CYCLE[i % len(LOSS_COLOR_CYCLE)]
+            tile_loss = vegetation_loss_tile(
+                aoi_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END,
+                LOSS_THRESHOLD, forest_spec=spec, color=color,
+            )
+            loss_layers.append({"spec": spec, "tile_loss": tile_loss, "color": color})
     except Exception as e:
         st.error(f"Earth Engine computation failed: {e}")
 
@@ -494,11 +546,9 @@ if active_gdf is not None:
 
 
 # =========================================================
-# SITES CULTURELS : parsing, buffer 1km, masque de perte NDVI
+# SITES CULTURELS : parsing, affichage en points (pas de buffer)
 # =========================================================
 sites_gdf = None
-buffers_gdf = None
-loss_layers = []  # liste de dicts : threshold, tile_loss
 site_name_col = None
 
 if uploaded_sites_file is not None:
@@ -520,29 +570,35 @@ if uploaded_sites_file is not None:
             sites_gdf = None
         else:
             site_name_col = site_label_column(sites_gdf)
-            buffers_gdf = buffer_points_1km(sites_gdf)
-            st.success(f"✅ {len(sites_gdf)} site(s) loaded, {SITE_BUFFER_METERS} m buffer applied")
+            st.success(f"✅ {len(sites_gdf)} site(s) loaded")
 
     except Exception as e:
         st.error(f"Could not read the sites file: {e}")
 
-if buffers_gdf is not None:
-    try:
-        buffer_union_ee = shapely_to_ee(buffers_gdf.geometry.unary_union)
-        buffer_geojson_str = json.dumps(buffer_union_ee.getInfo())
-        any_loss = False
-        for i, spec in enumerate(active_forest_specs):
-            color = LOSS_COLOR_CYCLE[i % len(LOSS_COLOR_CYCLE)]
-            tile_loss = vegetation_loss_tile(
-                buffer_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END,
-                LOSS_THRESHOLD, forest_spec=spec, color=color,
-            )
-            loss_layers.append({"spec": spec, "tile_loss": tile_loss, "color": color})
-            any_loss = any_loss or (tile_loss is not None)
-        if not any_loss:
-            st.warning("Not enough cloud-free Sentinel-2 images to assess vegetation loss around these sites.")
-    except Exception as e:
-        st.error(f"Earth Engine computation failed for site buffers: {e}")
+
+# =========================================================
+# EXPORT PDF (stats simples, sur le 1er seuil forêt actif)
+# =========================================================
+if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0] is not None:
+    st.subheader("📄 Report export")
+    if st.button("Generate PDF report"):
+        with st.spinner("Computing statistics..."):
+            try:
+                stats = forest_stats(aoi_geojson_str, active_forest_specs[0])
+                if stats is None:
+                    st.warning("Not enough cloud-free Sentinel-2 images to compute statistics.")
+                else:
+                    pdf_bytes = build_pdf_report(
+                        active_forest_specs[0], stats, len(sites_gdf) if sites_gdf is not None else 0
+                    )
+                    st.download_button(
+                        "⬇️ Download PDF",
+                        data=pdf_bytes,
+                        file_name="vegetation_report.pdf",
+                        mime="application/pdf",
+                    )
+            except Exception as e:
+                st.error(f"Report generation failed: {e}")
 
 
 # =========================================================
@@ -567,6 +623,22 @@ folium.TileLayer(
     attr="Esri World Imagery",
     name="Satellite",
     overlay=False,
+).add_to(m)
+
+# Routes + noms de villes en surimpression du satellite (Esri Reference services)
+folium.TileLayer(
+    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+    attr="Esri",
+    name="Roads",
+    overlay=True,
+    show=True,
+).add_to(m)
+folium.TileLayer(
+    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+    attr="Esri",
+    name="Place labels",
+    overlay=True,
+    show=True,
 ).add_to(m)
 
 folium.GeoJson(
@@ -601,36 +673,23 @@ for i, layer in enumerate(ndvi_layers):
     if layer["tile_diff"]:
         add_tile_layer(m, layer["tile_diff"], f"Vegetation change {EARLY_LABEL} → {RECENT_LABEL}{_suffix(spec)}", show=False)
 
-if buffers_gdf is not None:
-    folium.GeoJson(
-        buffers_gdf[["geometry"]].to_json(),
-        name=f"Site buffers ({SITE_BUFFER_METERS} m)",
-        style_function=lambda x: {
-            "color": "orange",
-            "weight": 2,
-            "dashArray": "4",
-            "fillOpacity": 0,
-        },
-    ).add_to(m)
-
+if sites_gdf is not None:
+    sites_layer = folium.FeatureGroup(name="Cultural / heritage sites", show=True)
     for i, row in sites_gdf.iterrows():
         label = str(row[site_name_col]) if site_name_col else f"Site {i + 1}"
-        folium.CircleMarker(
+        folium.Marker(
             location=[row.geometry.y, row.geometry.x],
-            radius=5,
-            color="orange",
-            fill=True,
-            fill_color="orange",
-            fill_opacity=1,
             popup=label,
             tooltip=label,
-        ).add_to(m)
+            icon=folium.Icon(color="orange", icon="info-sign"),
+        ).add_to(sites_layer)
+    sites_layer.add_to(m)
 
 for layer in loss_layers:
     if layer["tile_loss"]:
         add_tile_layer(
             m, layer["tile_loss"],
-            f"Vegetation loss near sites (dNDVI < {LOSS_THRESHOLD}{_suffix(layer['spec'])})",
+            f"Forest loss (dNDVI < {LOSS_THRESHOLD}{_suffix(layer['spec'])})",
             show=True,
         )
 
@@ -677,9 +736,8 @@ if loss_layers and any(l["tile_loss"] for l in loss_layers):
     <div style="position: fixed; bottom: 250px; left: 30px; width: 260px;
                 background-color: white; border:2px solid grey; z-index:9999;
                 font-size:11px; padding:7px;">
-      <b>Sites — vegetation loss</b><br><br>
+      <b>Forest loss</b><br><br>
       {rows}
-      <span style="font-size:10px;">within {SITE_BUFFER_METERS} m buffer</span>
     </div>
     """
     m.get_root().html.add_child(folium.Element(loss_legend))
