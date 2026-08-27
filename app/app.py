@@ -237,3 +237,4 @@ def add_tile_layer(fmap, url, name, show=False):
     folium.TileLayer(
         tiles=url,
         attr="Google Earth Engine",
+    )
