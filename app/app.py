@@ -25,7 +25,7 @@ st.set_page_config(
 
 NDVI_PALETTE = ["7f7f7f", "a6611a", "dfc27d", "f5f5f5", "a6d96a", "1a9850", "006837"]
 DIFF_PALETTE = ["67001f", "d73027", "fee08b", "ffffff", "d9ef8b", "1a9850", "00441b"]
-LOSS_COLORS = {0.5: "ff6600", 0.6: "ff0000"}  # couleurs distinctes par seuil en mode comparaison
+LOSS_COLOR_CYCLE = ["ff0000", "ff6600", "ffcc00"]  # couleurs distinctes en mode comparaison
 
 # Fenêtre phénologique appliquée chaque année (pic de végétation, comparabilité inter-annuelle)
 MONTH_START, MONTH_END = 5, 9  # mai à septembre
@@ -43,10 +43,15 @@ BOUNDARY_PATH = "data/raw/app_boundary.geojson"
 SITE_BUFFER_METERS = 1000
 LOSS_THRESHOLD = -0.1  # dNDVI < -0.1 = perte de végétation jugée significative
 
-# Masque forêt : NDVI médian sur l'ANNEE COMPLETE (pas juste mai-sept) de la période
-# de référence. Une forêt reste dense toute l'année ; un champ cultivé non (cycle de
-# culture / sol nu après récolte), ce qui permet de l'exclure du reste de l'analyse.
-FOREST_MASK_CHOICES = {
+# Masque forêt : deux méthodes disponibles.
+# - "ndvi" : NDVI médian sur l'ANNEE COMPLETE (pas juste mai-sept) >= seuil. Une forêt
+#   reste dense toute l'année ; un champ cultivé non (cycle de culture / sol nu après
+#   récolte). Simple mais un seuil seul confond encore certains champs très verts.
+# - "dw"   : Google Dynamic World (classification Sentinel-2 déjà entraînée, 10m,
+#   quasi temps réel) — probabilité "trees" par pixel >= seuil. Un vrai classifieur
+#   au lieu d'un seuil NDVI arbitraire, donc en général moins de faux positifs sur
+#   les cultures très vertes.
+NDVI_MASK_CHOICES = {
     "Désactivé": [],
     "0.5": [0.5],
     "0.6": [0.6],
@@ -234,14 +239,39 @@ def full_year_ndvi_image(aoi, start, end, cloud_pct=CLOUD_PCT_S2):
     return ndvi, n
 
 
-def get_forest_mask(aoi, threshold, start=EARLY_START, end=EARLY_END):
-    """Masque binaire (selfMask) : pixels dont le NDVI annuel médian de référence
-    dépasse `threshold`. Appliqué en aval pour exclure les champs cultivés des
-    couches NDVI / dNDVI / détection de perte."""
-    ndvi, n = full_year_ndvi_image(aoi, start, end)
-    if ndvi is None:
+def dynamic_world_forest_mask(aoi, prob_threshold, start=EARLY_START, end=EARLY_END):
+    """Masque binaire (selfMask) basé sur Google Dynamic World : moyenne de la
+    probabilité 'trees' par pixel sur la période, seuillée. DW est déjà un
+    classifieur entraîné sur Sentinel-2 (10m), donc plus robuste qu'un simple
+    seuil NDVI pour distinguer forêt et culture très verte."""
+    dw = (
+        ee.ImageCollection("GOOGLE/DYNAMICWORLD/V1")
+        .filterDate(start, end)
+        .filterBounds(aoi)
+        .select("trees")
+    )
+    n = dw.size().getInfo()
+    if n == 0:
         return None
-    return ndvi.gte(threshold).selfMask()
+    trees_prob = dw.mean().clip(aoi)
+    return trees_prob.gte(prob_threshold).selfMask()
+
+
+def get_forest_mask(aoi, spec, start=EARLY_START, end=EARLY_END):
+    """Masque binaire (selfMask) pour un spec = ("ndvi", seuil) ou ("dw", seuil).
+    Appliqué en aval pour exclure les champs cultivés des couches NDVI / dNDVI /
+    détection de perte."""
+    if spec is None:
+        return None
+    method, value = spec
+    if method == "ndvi":
+        ndvi, n = full_year_ndvi_image(aoi, start, end)
+        if ndvi is None:
+            return None
+        return ndvi.gte(value).selfMask()
+    elif method == "dw":
+        return dynamic_world_forest_mask(aoi, value, start, end)
+    return None
 
 
 def _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end):
@@ -253,51 +283,51 @@ def _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end):
     return recent_ndvi.subtract(early_ndvi).rename("dNDVI").clip(aoi)
 
 
-def _apply_forest_mask(img, aoi, forest_threshold):
-    """Applique le masque forêt (si un seuil est fourni) à une image ee.Image."""
-    if forest_threshold is None or img is None:
+def _apply_forest_mask(img, aoi, forest_spec):
+    """Applique le masque forêt (si un spec est fourni) à une image ee.Image."""
+    if forest_spec is None or img is None:
         return img
-    mask = get_forest_mask(aoi, forest_threshold)
+    mask = get_forest_mask(aoi, forest_spec)
     if mask is None:
         return img
     return img.updateMask(mask)
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct, forest_threshold=None):
+def sentinel2_ndvi_tile(aoi_geojson_str, start, end, cloud_pct, forest_spec=None):
     aoi = ee.Geometry(json.loads(aoi_geojson_str))
     ndvi, n = sentinel2_ndvi_image(aoi, start, end, cloud_pct)
     if ndvi is None:
         return None, 0
-    ndvi = _apply_forest_mask(ndvi, aoi, forest_threshold)
+    ndvi = _apply_forest_mask(ndvi, aoi, forest_spec)
     tile = ndvi.getMapId({"min": -1, "max": 1, "palette": NDVI_PALETTE})
     return tile["tile_fetcher"].url_format, n
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end, forest_threshold=None):
+def ndvi_diff_tile(aoi_geojson_str, early_start, early_end, recent_start, recent_end, forest_spec=None):
     aoi = ee.Geometry(json.loads(aoi_geojson_str))
     diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
     if diff is None:
         return None
-    diff = _apply_forest_mask(diff, aoi, forest_threshold)
+    diff = _apply_forest_mask(diff, aoi, forest_spec)
     tile = diff.getMapId({"min": -0.4, "max": 0.4, "palette": DIFF_PALETTE})
     return tile["tile_fetcher"].url_format
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def vegetation_loss_tile(
-    aoi_geojson_str, early_start, early_end, recent_start, recent_end, threshold, forest_threshold=None,
+    aoi_geojson_str, early_start, early_end, recent_start, recent_end, threshold, forest_spec=None,
     color="ff0000",
 ):
     """Masque coloré : pixels où dNDVI < threshold (perte significative), clippé à aoi,
-    restreint aux pixels forêt si forest_threshold est fourni."""
+    restreint aux pixels forêt si forest_spec est fourni."""
     aoi = ee.Geometry(json.loads(aoi_geojson_str))
     diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
     if diff is None:
         return None
     loss_mask = diff.lt(threshold).selfMask()
-    loss_mask = _apply_forest_mask(loss_mask, aoi, forest_threshold)
+    loss_mask = _apply_forest_mask(loss_mask, aoi, forest_spec)
     tile = loss_mask.getMapId({"palette": [color], "min": 0, "max": 1})
     return tile["tile_fetcher"].url_format
 
@@ -362,16 +392,33 @@ with col_a:
 # ---- Masque forêt : contrôle sidebar ----
 st.sidebar.subheader("🌲 Forest mask")
 st.sidebar.caption(
-    "Excludes cropland: keeps only pixels whose full-year median NDVI "
-    f"({EARLY_LABEL}) stays above the threshold, since forest stays dense "
-    "year-round while crops don't."
+    "Excludes cropland so vegetation-loss layers only show forest, not "
+    "harvested/rotated fields."
 )
-forest_mode = st.sidebar.radio(
-    "Threshold",
-    options=list(FOREST_MASK_CHOICES.keys()),
-    index=3,  # "Comparer 0.5 vs 0.6" par défaut
+mask_method = st.sidebar.radio(
+    "Method",
+    options=["NDVI (annual)", "Dynamic World"],
+    index=1,  # on teste Dynamic World par défaut
 )
-active_forest_thresholds = FOREST_MASK_CHOICES[forest_mode] or [None]
+
+if mask_method == "NDVI (annual)":
+    st.sidebar.caption(
+        f"Keeps pixels whose full-year median NDVI ({EARLY_LABEL}) stays above "
+        "the threshold — forest stays dense year-round, crops don't."
+    )
+    ndvi_mode = st.sidebar.radio(
+        "NDVI threshold",
+        options=list(NDVI_MASK_CHOICES.keys()),
+        index=1,  # "0.5"
+    )
+    active_forest_specs = [("ndvi", t) if t is not None else None for t in (NDVI_MASK_CHOICES[ndvi_mode] or [None])]
+else:
+    st.sidebar.caption(
+        "Google Dynamic World: pixel-level tree probability from a trained "
+        f"Sentinel-2 classifier, averaged over {EARLY_LABEL}."
+    )
+    dw_threshold = st.sidebar.slider("Tree probability threshold", 0.0, 1.0, 0.5, 0.05)
+    active_forest_specs = [("dw", dw_threshold)]
 
 # Limite de l'application (rectangle déjà présent dans le repo)
 boundary = gpd.read_file(BOUNDARY_PATH)
@@ -421,18 +468,18 @@ if active_gdf is not None:
     aoi_geojson_str = json.dumps(aoi_ee.getInfo())
 
     try:
-        for th in active_forest_thresholds:
+        for spec in active_forest_specs:
             tile_recent, n_recent = sentinel2_ndvi_tile(
-                aoi_geojson_str, RECENT_START, RECENT_END, CLOUD_PCT_S2, forest_threshold=th
+                aoi_geojson_str, RECENT_START, RECENT_END, CLOUD_PCT_S2, forest_spec=spec
             )
             tile_early, n_early = sentinel2_ndvi_tile(
-                aoi_geojson_str, EARLY_START, EARLY_END, CLOUD_PCT_S2, forest_threshold=th
+                aoi_geojson_str, EARLY_START, EARLY_END, CLOUD_PCT_S2, forest_spec=spec
             )
             tile_diff = ndvi_diff_tile(
-                aoi_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END, forest_threshold=th
+                aoi_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END, forest_spec=spec
             )
             ndvi_layers.append({
-                "threshold": th,
+                "spec": spec,
                 "tile_recent": tile_recent,
                 "tile_early": tile_early,
                 "tile_diff": tile_diff,
@@ -484,13 +531,13 @@ if buffers_gdf is not None:
         buffer_union_ee = shapely_to_ee(buffers_gdf.geometry.unary_union)
         buffer_geojson_str = json.dumps(buffer_union_ee.getInfo())
         any_loss = False
-        for th in active_forest_thresholds:
-            color = LOSS_COLORS.get(th, "ff0000")
+        for i, spec in enumerate(active_forest_specs):
+            color = LOSS_COLOR_CYCLE[i % len(LOSS_COLOR_CYCLE)]
             tile_loss = vegetation_loss_tile(
                 buffer_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END,
-                LOSS_THRESHOLD, forest_threshold=th, color=color,
+                LOSS_THRESHOLD, forest_spec=spec, color=color,
             )
-            loss_layers.append({"threshold": th, "tile_loss": tile_loss, "color": color})
+            loss_layers.append({"spec": spec, "tile_loss": tile_loss, "color": color})
             any_loss = any_loss or (tile_loss is not None)
         if not any_loss:
             st.warning("Not enough cloud-free Sentinel-2 images to assess vegetation loss around these sites.")
@@ -536,19 +583,23 @@ if active_gdf is not None:
     ).add_to(m)
 
 
-def _suffix(threshold):
-    return "" if threshold is None else f" — forest ≥{threshold}"
+def _suffix(spec):
+    if spec is None:
+        return ""
+    method, value = spec
+    label = "NDVI" if method == "ndvi" else "DW trees"
+    return f" — {label}≥{value}"
 
 
 for i, layer in enumerate(ndvi_layers):
-    th = layer["threshold"]
+    spec = layer["spec"]
     show_default = i == 0  # seule la première combinaison est visible par défaut
     if layer["tile_recent"]:
-        add_tile_layer(m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(th)} (Sentinel-2)", show=show_default)
+        add_tile_layer(m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)", show=show_default)
     if layer["tile_early"]:
-        add_tile_layer(m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(th)} (Sentinel-2)", show=False)
+        add_tile_layer(m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)", show=False)
     if layer["tile_diff"]:
-        add_tile_layer(m, layer["tile_diff"], f"Vegetation change {EARLY_LABEL} → {RECENT_LABEL}{_suffix(th)}", show=False)
+        add_tile_layer(m, layer["tile_diff"], f"Vegetation change {EARLY_LABEL} → {RECENT_LABEL}{_suffix(spec)}", show=False)
 
 if buffers_gdf is not None:
     folium.GeoJson(
@@ -579,7 +630,7 @@ for layer in loss_layers:
     if layer["tile_loss"]:
         add_tile_layer(
             m, layer["tile_loss"],
-            f"Vegetation loss near sites (dNDVI < {LOSS_THRESHOLD}{_suffix(layer['threshold'])})",
+            f"Vegetation loss near sites (dNDVI < {LOSS_THRESHOLD}{_suffix(layer['spec'])})",
             show=True,
         )
 
@@ -607,7 +658,7 @@ else:
 m.fit_bounds([[miny, minx], [maxy, maxx]])
 
 if ndvi_layers and ndvi_layers[0]["tile_recent"]:
-    legend_title = f"NDVI {RECENT_LABEL}" + _suffix(ndvi_layers[0]["threshold"])
+    legend_title = f"NDVI {RECENT_LABEL}" + _suffix(ndvi_layers[0]["spec"])
     m.get_root().html.add_child(folium.Element(
         legend_html(legend_title, "Low", "High", NDVI_PALETTE, bottom=30)
     ))
@@ -619,7 +670,7 @@ if loss_layers and any(l["tile_loss"] for l in loss_layers):
     rows = "".join(
         f'<span style="display:inline-block; width:14px; height:14px; '
         f'background:#{l["color"]}; margin-right:6px;"></span>'
-        f'dNDVI &lt; {LOSS_THRESHOLD}{_suffix(l["threshold"])}<br>'
+        f'dNDVI &lt; {LOSS_THRESHOLD}{_suffix(l["spec"])}<br>'
         for l in loss_layers if l["tile_loss"]
     )
     loss_legend = f"""
