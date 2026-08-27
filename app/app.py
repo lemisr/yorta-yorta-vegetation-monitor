@@ -172,26 +172,26 @@ def sentinel2_ndvi_image(aoi, start, end, cloud_pct=CLOUD_PCT_S2):
     if n == 0:
         return None, 0
     
-    # 1. Calculer le NDVI pour chaque image de la collection temporelle
+    # 1. Calculer le NDVI pour chaque scène de la série temporelle
     def compute_collection_ndvi(img):
         return img.normalizedDifference(["B8", "B4"]).rename("NDVI")
         
     ndvi_collection = coll.map(compute_collection_ndvi)
     
-    # 2. Calculer les statistiques temporelles pour repérer l'agriculture
+    # 2. Extraire les signatures statistiques d'exclusion
     ndvi_median = ndvi_collection.median()
     ndvi_std = ndvi_collection.reduce(ee.Reducer.stdDev())
     ndvi_min = ndvi_collection.reduce(ee.Reducer.min())
     
-    # 3. Créer le masque de forêt ultra-strict :
-    # - ndvi_std.lt(0.06)    -> Élimine les cultures car elles varient beaucoup (stdDev élevé)
-    # - ndvi_median.gt(0.65) -> Sélectionne la vraie forêt dense
-    # - ndvi_min.gt(0.45)    -> Élimine les cultures après récolte, coupe ou labour
+    # 3. Masque forestier strict (anti-cultures)
+    # stdDev < 0.06 : élimine les cultures (fortes variations à la récolte)
+    # median > 0.65 : sélectionne le couvert arboré haut
+    # min > 0.45    : bloque les parcelles fauchées, labourées ou récoltées
     masque_foret = (ndvi_std.lt(0.06)
                     .And(ndvi_median.gt(0.65))
                     .And(ndvi_min.gt(0.45)))
     
-    # 4. Appliquer le masque sur le composite médian final
+    # 4. Assigner le masque au composite final
     ndvi_final = ndvi_median.updateMask(masque_foret).rename("NDVI").clip(aoi)
     
     return ndvi_final, n
@@ -229,7 +229,11 @@ def vegetation_loss_tile(aoi_geojson_str, early_start, early_end, recent_start, 
     diff = _s2_ndvi_diff_image(aoi, early_start, early_end, recent_start, recent_end)
     if diff is None:
         return None
-    loss_mask = diff.lt(threshold)
-    loss_image = diff.updateMask(loss_mask)
-    tile = loss_image.getMapId({"min": -0.4, "max": threshold, "palette": ["#ff0000", "#ff3333"]})
+    loss_mask = diff.lt(threshold).selfMask()
+    tile = loss_mask.getMapId({"palette": ["ff0000"], "min": 0, "max": 1})
     return tile["tile_fetcher"].url_format
+
+def add_tile_layer(fmap, url, name, show=False):
+    folium.TileLayer(
+        tiles=url,
+        attr="Google Earth Engine",
