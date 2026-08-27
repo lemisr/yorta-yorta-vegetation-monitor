@@ -7,11 +7,9 @@ folium
 streamlit-folium
 rasterio
 earthengine-api
-
+geemap
 scikit-learn
 reportlab
 shapely
 earthengine-api
-streamlit-folium
-folium
-earthengine-api
+
