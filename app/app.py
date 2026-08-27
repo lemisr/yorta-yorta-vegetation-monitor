@@ -28,7 +28,7 @@ function addNDVI(image) {
   return image.addBands(ndvi);
 }
 
-// 2. CHARGEMENT DES COLLECTIONS COMPLÈTES (Pour analyser la variabilité)
+// 2. CHARGEMENT DES COLLECTIONS COMPLÈTES
 var collection_P1 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
   .filterBounds(roi)
   .filterDate(debut_P1, fin_P1)
@@ -43,13 +43,20 @@ var collection_P2 = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
   .map(maskS2clouds)
   .map(addNDVI);
 
-// 3. CRÉATION DU MASQUE FORESTIER MAISON (Filtre anti-cultures)
-// Les cultures varient beaucoup en 2 ans (Ecart-type élevé). La forêt reste stable.
+// 3. CRÉATION DU MASQUE FORESTIER ULTRA-STRICT (Anti-cultures amélioré)
+// Calcul des statistiques sur la période P1 (référence)
 var ndvi_std_P1 = collection_P1.select('NDVI').reduce(ee.Reducer.stdDev());
 var ndvi_median_P1 = collection_P1.select('NDVI').median();
+var ndvi_min_P1 = collection_P1.select('NDVI').reduce(ee.Reducer.min());
 
-// On garde les pixels où le NDVI est stable (stdDev < 0.08) ET haut (median > 0.6)
-var masqueForetSentinel = ndvi_std_P1.lt(0.08).and(ndvi_median_P1.gt(0.6)).clip(roi);
+// CRITÈRES REVISITÉS :
+// - stdDev < 0.05 : Très forte stabilité (les cultures récoltées varient beaucoup plus)
+// - median > 0.70 : Vraie forêt dense et fermée
+// - min > 0.50    : Élimine les champs qui ont été coupés, labourés ou récoltés durant les 2 ans
+var masqueForetSentinel = ndvi_std_P1.lt(0.05)
+  .and(ndvi_median_P1.gt(0.70))
+  .and(ndvi_min_P1.gt(0.50))
+  .clip(roi);
 
 // 4. GÉNÉRATION DES COMPOSITES FINAUX
 var s2_P1_median = collection_P1.median().clip(roi);
@@ -62,7 +69,7 @@ var ndvi_P2_foret = s2_P2_median.select('NDVI').updateMask(masqueForetSentinel);
 var changementNDVI = ndvi_P2_foret.subtract(ndvi_P1_foret).rename('Changement');
 
 // 6. AFFICHAGE DE L'APPLICATION
-var visNdvi = {min: 0.4, max: 0.8, palette: ['#ece7f2', '#a6bddb', '#016450']};
+var visNdvi = {min: 0.5, max: 0.85, palette: ['#ece7f2', '#a6bddb', '#016450']};
 var visChangement = {min: -0.15, max: 0.15, palette: ['#d73027', '#ffffff', '#1a9850']};
 
 Map.addLayer(s2_P2_median, {bands: ['B4', 'B3', 'B2'], max: 0.3}, '1. Fond de carte Sentinel-2 2024-2025', false);
