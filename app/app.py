@@ -379,7 +379,10 @@ def build_report_ee_image(aoi, forest_spec):
         loss_vis = loss_mask.visualize(palette=["ff0000"])
         background = _alpha_blend(background, loss_vis, 0.3)
 
-    return background
+    # Après les blends (multiply/add), l'image redevient numérique générique —
+    # on la re-caste explicitement en octets 0-255 pour que getThumbURL ne parte
+    # pas sur un auto-stretch (lent, parfois source d'erreur sur les gros polygones).
+    return background.clamp(0, 255).uint8()
 
 
 def build_report_image_png(active_gdf, forest_spec, sites_gdf, site_name_col, margin_ratio=0.3, width_px=1000):
@@ -408,6 +411,8 @@ def build_report_image_png(active_gdf, forest_spec, sites_gdf, site_name_col, ma
         "dimensions": f"{width_px}x{height_px}",
         "format": "png",
         "crs": "EPSG:4326",
+        "min": 0,
+        "max": 255,
     })
     resp = requests.get(url, timeout=60)
     resp.raise_for_status()
@@ -571,7 +576,7 @@ else:
         "Google Dynamic World: pixel-level tree probability from a trained "
         f"Sentinel-2 classifier, averaged over {EARLY_LABEL}."
     )
-    dw_threshold = st.sidebar.slider("Tree probability threshold", 0.0, 1.0, 0.5, 0.05)
+    dw_threshold = st.sidebar.slider("Tree probability threshold", 0.0, 1.0, 0.35, 0.05)
     active_forest_specs = [("dw", dw_threshold)]
 
 # Limite de l'application (rectangle déjà présent dans le repo)
@@ -700,6 +705,7 @@ if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0
                 if stats is None:
                     st.warning("Not enough cloud-free Sentinel-2 images to compute statistics.")
                     st.session_state.pop("report_pdf_bytes", None)
+                    st.session_state.pop("report_error", None)
                 else:
                     report_png = build_report_image_png(active_gdf, spec, sites_gdf, site_name_col)
                     pdf_bytes = build_pdf_report(
@@ -710,9 +716,18 @@ if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0
                     # même bloc `if st.button(...)`, disparaît dès le rerun déclenché
                     # par son propre clic — un bug classique Streamlit.
                     st.session_state["report_pdf_bytes"] = pdf_bytes
-            except Exception as e:
-                st.error(f"Report generation failed: {e}")
+                    st.session_state.pop("report_error", None)
+            except Exception:
+                import traceback
+                # Stocké en session_state pour la même raison que le PDF ci-dessus :
+                # sinon st.error() disparaît au prochain rerun (ex: interaction carte)
+                # avant même d'avoir pu le lire.
+                st.session_state["report_error"] = traceback.format_exc()
                 st.session_state.pop("report_pdf_bytes", None)
+
+    if st.session_state.get("report_error"):
+        st.error("Report generation failed:")
+        st.code(st.session_state["report_error"])
 
     if st.session_state.get("report_pdf_bytes"):
         st.download_button(
