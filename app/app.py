@@ -370,7 +370,7 @@ def build_report_ee_image(aoi, forest_spec):
     if ndvi_recent is not None:
         ndvi_recent = _apply_forest_mask(ndvi_recent, aoi, forest_spec)
         ndvi_vis = ndvi_recent.visualize(min=-1, max=1, palette=NDVI_PALETTE)
-        background = _alpha_blend(background, ndvi_vis, 0.5)
+        background = _alpha_blend(background, ndvi_vis, 0.4)  # ~60% transparence, cohérent avec la carte
 
     diff = _s2_ndvi_diff_image(aoi, EARLY_START, EARLY_END, RECENT_START, RECENT_END)
     if diff is not None:
@@ -491,29 +491,52 @@ def build_pdf_report(spec, stats, site_count, report_image_png=None):
     return buf.read()
 
 
-def add_tile_layer(fmap, url, name, show=False):
+def add_tile_layer(fmap, url, name, show=False, opacity=1.0, control=True):
     folium.TileLayer(
         tiles=url,
         attr="Google Earth Engine",
         name=name,
         overlay=True,
-        control=True,
+        control=control,
         show=show,
+        opacity=opacity,
     ).add_to(fmap)
 
 
-def legend_html(title, low_label, high_label, palette, bottom):
-    gradient = ", ".join(f"#{c}" for c in palette)
+def legend_html_v2(items, bottom=30):
+    """Légende design (carte arrondie, ombre légère). `items` est une liste de dicts :
+    {'type': 'gradient', 'title', 'palette', 'low', 'high'} ou {'type': 'swatch', 'title', 'color'}."""
+    blocks = []
+    for item in items:
+        if item["type"] == "gradient":
+            gradient = ", ".join(f"#{c}" for c in item["palette"])
+            blocks.append(f"""
+              <div style="margin-bottom:10px;">
+                <div style="font-weight:600; margin-bottom:4px;">{item['title']}</div>
+                <div style="height:10px; border-radius:5px;
+                            background: linear-gradient(to right, {gradient});"></div>
+                <div style="display:flex; justify-content:space-between; font-size:10px;
+                            color:#555; margin-top:2px;">
+                  <span>{item['low']}</span><span>{item['high']}</span>
+                </div>
+              </div>
+            """)
+        elif item["type"] == "swatch":
+            blocks.append(f"""
+              <div style="display:flex; align-items:center; margin-bottom:4px;">
+                <span style="display:inline-block; width:12px; height:12px; border-radius:3px;
+                             background:#{item['color']}; margin-right:8px;"></span>
+                <span style="font-size:11px; color:#333;">{item['title']}</span>
+              </div>
+            """)
+    body = "".join(blocks)
     return f"""
-    <div style="position: fixed; bottom: {bottom}px; left: 30px; width: 260px;
-                background-color: white; border:2px solid grey; z-index:9999;
-                font-size:11px; padding:7px;">
-      <b>{title}</b><br><br>
-      <div style="height:20px; width:240px;
-                  background: linear-gradient(to right, {gradient});"></div>
-      <div style="display:flex; justify-content:space-between; font-size:12px;">
-        <span>{low_label}</span><span>{high_label}</span>
-      </div>
+    <div style="position: fixed; bottom: {bottom}px; left: 24px; width: 230px;
+                background-color: rgba(255,255,255,0.95); border-radius:10px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index:9999;
+                font-family: -apple-system, Helvetica, Arial, sans-serif;
+                padding:12px 14px;">
+      {body}
     </div>
     """
 
@@ -535,9 +558,9 @@ st.write("Interactive vegetation monitoring application using GIS and remote sen
 
 uploaded_file = st.file_uploader("Upload your analysis area (GeoJSON)", type=["geojson"])
 
-st.subheader("🏛️ Cultural / heritage sites")
+st.subheader("📍 Places")
 uploaded_sites_file = st.file_uploader(
-    "Upload site locations (KML, zipped Shapefile, or CSV with lat/lon columns)",
+    "Upload point locations (KML, zipped Shapefile, or CSV with lat/lon columns)",
     type=["kml", "zip", "csv"],
 )
 
@@ -619,7 +642,7 @@ if st.session_state.drawn_invalid_msg:
 # CALCUL NDVI + PERTE DE FORET (sur toute l'AOI, si une AOI active et valide existe)
 # Une entrée par seuil forêt actif (None = pas de masque, ou [0.5], [0.6], [0.5, 0.6])
 # =========================================================
-ndvi_layers = []  # liste de dicts : spec, tile_recent, tile_early, tile_diff
+ndvi_layers = []  # liste de dicts : spec, tile_recent, tile_early
 loss_layers = []  # liste de dicts : spec, tile_loss, color
 n_recent = n_early = 0
 aoi_geojson_str = None
@@ -636,14 +659,10 @@ if active_gdf is not None:
             tile_early, n_early = sentinel2_ndvi_tile(
                 aoi_geojson_str, EARLY_START, EARLY_END, CLOUD_PCT_S2, forest_spec=spec
             )
-            tile_diff = ndvi_diff_tile(
-                aoi_geojson_str, EARLY_START, EARLY_END, RECENT_START, RECENT_END, forest_spec=spec
-            )
             ndvi_layers.append({
                 "spec": spec,
                 "tile_recent": tile_recent,
                 "tile_early": tile_early,
-                "tile_diff": tile_diff,
             })
 
             color = LOSS_COLOR_CYCLE[i % len(LOSS_COLOR_CYCLE)]
@@ -673,23 +692,23 @@ if uploaded_sites_file is not None:
             uploaded_sites_file.getvalue(), uploaded_sites_file.name
         )
 
-        # On ne garde que les sites dans la limite de l'application (évite tout crash EE)
+        # On ne garde que les points dans la limite de l'application (évite tout crash EE)
         inside_mask = raw_gdf.within(boundary_geom)
         excluded = int((~inside_mask).sum())
         sites_gdf = raw_gdf[inside_mask].reset_index(drop=True)
 
         if excluded:
-            st.warning(f"{excluded} site(s) outside the application boundary were ignored.")
+            st.warning(f"{excluded} point(s) outside the application boundary were ignored.")
 
         if sites_gdf.empty:
-            st.error("❌ No site is inside the application boundary.")
+            st.error("❌ No point is inside the application boundary.")
             sites_gdf = None
         else:
             site_name_col = site_label_column(sites_gdf)
-            st.success(f"✅ {len(sites_gdf)} site(s) loaded")
+            st.success(f"✅ {len(sites_gdf)} point(s) loaded")
 
     except Exception as e:
-        st.error(f"Could not read the sites file: {e}")
+        st.error(f"Could not read the points file: {e}")
 
 
 # =========================================================
@@ -782,13 +801,16 @@ folium.GeoJson(
     boundary,
     name="Application boundary",
     style_function=lambda x: {"fillColor": "transparent", "color": "black", "weight": 1},
+    control=False,  # démo : toujours visible, pas de case à cocher
 ).add_to(m)
 
 if active_gdf is not None:
     folium.GeoJson(
         active_gdf[["geometry"]].to_json(),
         name="Selected area",
-        style_function=lambda x: {"color": "blue", "weight": 2, "fillOpacity": 0},
+        style_function=lambda x: {
+            "color": "#ffffff", "weight": 3, "dashArray": "8, 4", "fillOpacity": 0,
+        },
     ).add_to(m)
 
 
@@ -800,20 +822,26 @@ def _suffix(spec):
     return f" — {label}≥{value}"
 
 
+VEG_OPACITY = 0.4  # ~60% de transparence, pour laisser voir le fond de carte
+
 for i, layer in enumerate(ndvi_layers):
     spec = layer["spec"]
-    show_default = i == 0  # seule la première combinaison est visible par défaut
+    is_main = i == 0  # couche NDVI principale : toujours visible, démo, pas de case à cocher
     if layer["tile_recent"]:
-        add_tile_layer(m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)", show=show_default)
+        add_tile_layer(
+            m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)",
+            show=True, opacity=VEG_OPACITY, control=not is_main,
+        )
     if layer["tile_early"]:
-        add_tile_layer(m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)", show=False)
-    if layer["tile_diff"]:
-        add_tile_layer(m, layer["tile_diff"], f"Vegetation change {EARLY_LABEL} → {RECENT_LABEL}{_suffix(spec)}", show=False)
+        add_tile_layer(
+            m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)",
+            show=False, opacity=VEG_OPACITY,
+        )
 
 if sites_gdf is not None:
-    sites_layer = folium.FeatureGroup(name="Cultural / heritage sites", show=True)
+    sites_layer = folium.FeatureGroup(name="Places", show=True)
     for i, row in sites_gdf.iterrows():
-        label = str(row[site_name_col]) if site_name_col else f"Site {i + 1}"
+        label = str(row[site_name_col]) if site_name_col else f"Point {i + 1}"
         folium.Marker(
             location=[row.geometry.y, row.geometry.x],
             popup=label,
@@ -843,7 +871,7 @@ draw = Draw(
 )
 draw.add_to(m)
 
-any_ee_layer = any(l["tile_recent"] or l["tile_early"] or l["tile_diff"] for l in ndvi_layers) or any(
+any_ee_layer = any(l["tile_recent"] or l["tile_early"] for l in ndvi_layers) or any(
     l["tile_loss"] for l in loss_layers
 )
 if any_ee_layer:
@@ -853,31 +881,24 @@ else:
 
 m.fit_bounds([[miny, minx], [maxy, maxx]])
 
+legend_items = []
 if ndvi_layers and ndvi_layers[0]["tile_recent"]:
-    legend_title = f"NDVI {RECENT_LABEL}" + _suffix(ndvi_layers[0]["spec"])
-    m.get_root().html.add_child(folium.Element(
-        legend_html(legend_title, "Low", "High", NDVI_PALETTE, bottom=30)
-    ))
-if ndvi_layers and any(l["tile_diff"] for l in ndvi_layers):
-    m.get_root().html.add_child(folium.Element(
-        legend_html(f"Change {EARLY_LABEL}→{RECENT_LABEL}", "Loss", "Gain", DIFF_PALETTE, bottom=140)
-    ))
+    legend_items.append({
+        "type": "gradient",
+        "title": f"Vegetation (NDVI, {RECENT_LABEL})",
+        "palette": NDVI_PALETTE,
+        "low": "Low", "high": "High",
+    })
 if loss_layers and any(l["tile_loss"] for l in loss_layers):
-    rows = "".join(
-        f'<span style="display:inline-block; width:14px; height:14px; '
-        f'background:#{l["color"]}; margin-right:6px;"></span>'
-        f'dNDVI &lt; {LOSS_THRESHOLD}{_suffix(l["spec"])}<br>'
-        for l in loss_layers if l["tile_loss"]
-    )
-    loss_legend = f"""
-    <div style="position: fixed; bottom: 250px; left: 30px; width: 260px;
-                background-color: white; border:2px solid grey; z-index:9999;
-                font-size:11px; padding:7px;">
-      <b>Forest loss</b><br><br>
-      {rows}
-    </div>
-    """
-    m.get_root().html.add_child(folium.Element(loss_legend))
+    for l in loss_layers:
+        if l["tile_loss"]:
+            legend_items.append({
+                "type": "swatch",
+                "title": f"Forest loss{_suffix(l['spec'])}",
+                "color": l["color"],
+            })
+if legend_items:
+    m.get_root().html.add_child(folium.Element(legend_html_v2(legend_items, bottom=30)))
 
 
 # =========================================================
