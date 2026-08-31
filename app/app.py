@@ -37,6 +37,12 @@ EARLY_START, EARLY_END, EARLY_LABEL = "2019-01-01", "2020-12-31", "2019–2020"
 
 CLOUD_PCT_S2 = 40  # filtre scène large : le masquage fin se fait ensuite via SCL au pixel
 
+VEG_OPACITY = 0.4  # ~60% de transparence pour les couches NDVI, pour laisser voir le fond de carte
+
+ESRI_SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+ESRI_ROADS_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}"
+ESRI_LABELS_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}"
+
 BOUNDARY_PATH = "data/raw/app_boundary.geojson"
 
 LOSS_THRESHOLD = -0.1  # dNDVI < -0.1 = perte de végétation jugée significative
@@ -89,6 +95,12 @@ def geopandas_to_ee(gdf):
 def geom_signature(geom_dict):
     """Signature stable d'une géométrie GeoJSON (dict) pour détecter un changement."""
     return json.dumps(geom_dict, sort_keys=True)
+
+
+def shapely_geom_to_ee(geom):
+    """Convertit une géométrie shapely (WGS84) en ee.Geometry."""
+    geojson = json.loads(gpd.GeoSeries([geom], crs="EPSG:4326").to_json())
+    return ee.Geometry(geojson["features"][0]["geometry"])
 
 
 # ---- Import des sites culturels (KML / SHP zippé / CSV) ----
@@ -337,59 +349,59 @@ def forest_stats(aoi_geojson_str, forest_spec, threshold=LOSS_THRESHOLD):
     return {"forest_ha": forest_ha, "loss_ha": loss_ha, "loss_pct": loss_pct}
 
 
-def _s2_true_color_image(aoi, start, end, cloud_pct=CLOUD_PCT_S2):
-    """Composite Sentinel-2 vraies couleurs médian, fenêtre mai-sept (cohérent avec
-    les autres couches d'affichage), pour servir de fond au rapport."""
-    coll = _s2_collection(aoi, start, end, cloud_pct, month_range=(MONTH_START, MONTH_END))
-    n = coll.size().getInfo()
-    if n == 0:
-        return None
-    return coll.median().clip(aoi)
+def _deg2num(lat, lon, zoom):
+    """Coordonnées de tuile (flottantes) pour lat/lon à un niveau de zoom donné
+    (projection Web Mercator, standard des tuiles XYZ)."""
+    import math
+    lat_rad = math.radians(lat)
+    n = 2.0 ** zoom
+    x = (lon + 180.0) / 360.0 * n
+    y = (1.0 - math.log(math.tan(lat_rad) + 1.0 / math.cos(lat_rad)) / math.pi) / 2.0 * n
+    return x, y
 
 
-def _alpha_blend(background, overlay, opacity):
-    """Superpose `overlay` (image RVB 0-255, masquée là où elle ne s'applique pas)
-    sur `background` avec une opacité fixe là où overlay est présent, 0 ailleurs."""
-    alpha = overlay.mask().reduce(ee.Reducer.min()).multiply(opacity)
-    alpha3 = ee.Image.cat([alpha, alpha, alpha])
-    return background.multiply(ee.Image.constant(1).subtract(alpha3)).add(
-        overlay.unmask(0).multiply(alpha3)
-    )
+def _choose_zoom(minx, miny, maxx, maxy, target_px, max_zoom=18):
+    """Le plus grand niveau de zoom dont l'emprise tient dans target_px."""
+    for z in range(max_zoom, 0, -1):
+        x0, y0 = _deg2num(maxy, minx, z)
+        x1, y1 = _deg2num(miny, maxx, z)
+        if abs(x1 - x0) * 256 <= target_px and abs(y1 - y0) * 256 <= target_px:
+            return z
+    return 1
 
 
-def build_report_ee_image(aoi, forest_spec):
-    """Image RVB (0-255) pour le rapport : fond satellite vraies couleurs (période
-    récente) + NDVI récent masqué forêt à 50% d'opacité + perte de forêt à 30%
-    d'opacité (70% transparence). None si pas assez d'images."""
-    true_color = _s2_true_color_image(aoi, RECENT_START, RECENT_END)
-    if true_color is None:
-        return None
-    background = true_color.visualize(bands=["B4", "B3", "B2"], min=0, max=3000)
-
-    ndvi_recent, _ = sentinel2_ndvi_image(aoi, RECENT_START, RECENT_END)
-    if ndvi_recent is not None:
-        ndvi_recent = _apply_forest_mask(ndvi_recent, aoi, forest_spec)
-        ndvi_vis = ndvi_recent.visualize(min=-1, max=1, palette=NDVI_PALETTE)
-        background = _alpha_blend(background, ndvi_vis, 0.4)  # ~60% transparence, cohérent avec la carte
-
-    diff = _s2_ndvi_diff_image(aoi, EARLY_START, EARLY_END, RECENT_START, RECENT_END)
-    if diff is not None:
-        loss_mask = diff.lt(LOSS_THRESHOLD).selfMask()
-        loss_mask = _apply_forest_mask(loss_mask, aoi, forest_spec)
-        loss_vis = loss_mask.visualize(palette=["ff0000"])
-        background = _alpha_blend(background, loss_vis, 0.3)
-
-    # Après les blends (multiply/add), l'image redevient numérique générique —
-    # on la re-caste explicitement en octets 0-255 pour que getThumbURL ne parte
-    # pas sur un auto-stretch (lent, parfois source d'erreur sur les gros polygones).
-    return background.clamp(0, 255).uint8()
+def _fetch_tile(url_template, z, x, y, session):
+    """Récupère une tuile 256x256 ; renvoie une tuile transparente si indisponible
+    (tuile hors couverture, 404, etc.) plutôt que de faire planter tout le rendu."""
+    from PIL import Image as PILImage
+    url = url_template.format(z=z, x=x, y=y)
+    try:
+        resp = session.get(url, timeout=20)
+        resp.raise_for_status()
+        return PILImage.open(io.BytesIO(resp.content)).convert("RGBA")
+    except Exception:
+        return PILImage.new("RGBA", (256, 256), (0, 0, 0, 0))
 
 
-def build_report_image_png(active_gdf, forest_spec, sites_gdf, site_name_col, margin_ratio=0.3, width_px=1000):
-    """Génère le PNG du rapport : centré sur la zone étudiée + marge de contexte,
-    couches EE (satellite + NDVI récent 50% + perte 30%) puis tous les points de
-    sites importés dessinés par-dessus (pas seulement ceux visibles dans la zone
-    d'analyse — tous les sites chargés dans l'app)."""
+def _paste_tile_layer(canvas, url_template, zoom, tx_start, tx_end, ty_start, ty_end, gx0, gy0, session, opacity=1.0):
+    """Compose une couche de tuiles XYZ complète sur `canvas`, à l'opacité donnée."""
+    for tx in range(tx_start, tx_end + 1):
+        for ty in range(ty_start, ty_end + 1):
+            tile = _fetch_tile(url_template, zoom, tx, ty, session)
+            if opacity < 1.0:
+                alpha = tile.getchannel("A").point(lambda a: int(a * opacity))
+                tile.putalpha(alpha)
+            px, py = tx * 256 - gx0, ty * 256 - gy0
+            canvas.alpha_composite(tile, dest=(px, py))
+
+
+def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, margin_ratio=0.3, target_px=900):
+    """Composite le rapport à partir des MÊMES tuiles que celles affichées sur la
+    carte (satellite + routes + labels Esri, NDVI récent, perte) — pas de nouveau
+    calcul Earth Engine séparé : c'est littéralement un "screenshot" de ce qui est
+    déjà montré à l'écran, centré sur la zone étudiée avec une marge de contexte.
+    Tous les points de sites importés sont dessinés dessus, pas seulement ceux
+    dans la zone d'analyse."""
     import requests
     from PIL import Image as PILImage, ImageDraw
 
@@ -399,34 +411,50 @@ def build_report_image_png(active_gdf, forest_spec, sites_gdf, site_name_col, ma
     minx, maxx = minx - margin, maxx + margin
     miny, maxy = miny - margin, maxy + margin
 
-    aoi = geopandas_to_ee(active_gdf)
-    ee_image = build_report_ee_image(aoi, forest_spec)
-    if ee_image is None:
-        return None
+    zoom = _choose_zoom(minx, miny, maxx, maxy, target_px)
+    gx0f, gy0f = _deg2num(maxy, minx, zoom)  # coin haut-gauche (pixels globaux, flottant)
+    gx1f, gy1f = _deg2num(miny, maxx, zoom)  # coin bas-droit
+    gx0, gy0 = int(gx0f * 256), int(gy0f * 256)
+    width_px = max(1, int(gx1f * 256) - gx0)
+    height_px = max(1, int(gy1f * 256) - gy0)
 
-    height_px = max(1, round(width_px * (maxy - miny) / (maxx - minx)))
-    region = ee.Geometry.Rectangle([minx, miny, maxx, maxy], "EPSG:4326", geodesic=False)
-    url = ee_image.getThumbURL({
-        "region": region,
-        "dimensions": f"{width_px}x{height_px}",
-        "format": "png",
-        "crs": "EPSG:4326",
-        "min": 0,
-        "max": 255,
-    })
-    resp = requests.get(url, timeout=60)
-    resp.raise_for_status()
+    tx_start, ty_start = gx0 // 256, gy0 // 256
+    tx_end, ty_end = (gx0 + width_px) // 256, (gy0 + height_px) // 256
 
-    img = PILImage.open(io.BytesIO(resp.content)).convert("RGB")
+    canvas = PILImage.new("RGBA", (width_px, height_px), (0, 0, 0, 255))
+    session = requests.Session()
+
+    layers = [(ESRI_SATELLITE_URL, 1.0), (ESRI_ROADS_URL, 1.0), (ESRI_LABELS_URL, 1.0)]
+    if ndvi_tile_url:
+        layers.append((ndvi_tile_url, VEG_OPACITY))
+    if loss_tile_url:
+        layers.append((loss_tile_url, 1.0))
+
+    for url_template, opacity in layers:
+        _paste_tile_layer(canvas, url_template, zoom, tx_start, tx_end, ty_start, ty_end, gx0, gy0, session, opacity)
+
+    img = canvas.convert("RGB")
     draw = ImageDraw.Draw(img)
+
+    def _pixel(lon, lat):
+        px_f, py_f = _deg2num(lat, lon, zoom)
+        return px_f * 256 - gx0, py_f * 256 - gy0
+
+    # Contour de la zone étudiée (même style que sur la carte : blanc, pointillé)
+    for geom in active_gdf.geometry:
+        rings = [geom.exterior] + list(geom.interiors) if geom.geom_type == "Polygon" else [
+            r for poly in geom.geoms for r in [poly.exterior] + list(poly.interiors)
+        ]
+        for ring in rings:
+            pts = [_pixel(lon, lat) for lon, lat in ring.coords]
+            draw.line(pts, fill=(255, 255, 255), width=3)
 
     if sites_gdf is not None:
         for _, row in sites_gdf.iterrows():
             lon, lat = row.geometry.x, row.geometry.y
             if not (minx <= lon <= maxx and miny <= lat <= maxy):
                 continue  # site hors du cadre visible de l'image — ne peut pas être dessiné
-            px = (lon - minx) / (maxx - minx) * width_px
-            py = (maxy - lat) / (maxy - miny) * height_px
+            px, py = _pixel(lon, lat)
             r = 5
             draw.ellipse([px - r, py - r, px + r, py + r], fill=(255, 140, 0), outline=(0, 0, 0))
             if site_name_col:
@@ -726,7 +754,11 @@ if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0
                     st.session_state.pop("report_pdf_bytes", None)
                     st.session_state.pop("report_error", None)
                 else:
-                    report_png = build_report_image_png(active_gdf, spec, sites_gdf, site_name_col)
+                    ndvi_tile_url = ndvi_layers[0]["tile_recent"] if ndvi_layers else None
+                    loss_tile_url = loss_layers[0]["tile_loss"] if loss_layers else None
+                    report_png = build_report_image_png(
+                        active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col
+                    )
                     pdf_bytes = build_pdf_report(
                         spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
                         report_image_png=report_png,
@@ -775,7 +807,7 @@ folium.GeoJson(
 ).add_to(m)
 
 folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    tiles=ESRI_SATELLITE_URL,
     attr="Esri World Imagery",
     name="Satellite",
     overlay=False,
@@ -783,14 +815,14 @@ folium.TileLayer(
 
 # Routes + noms de villes en surimpression du satellite (Esri Reference services)
 folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}",
+    tiles=ESRI_ROADS_URL,
     attr="Esri",
     name="Roads",
     overlay=True,
     show=True,
 ).add_to(m)
 folium.TileLayer(
-    tiles="https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+    tiles=ESRI_LABELS_URL,
     attr="Esri",
     name="Place labels",
     overlay=True,
@@ -822,9 +854,7 @@ def _suffix(spec):
     return f" — {label}≥{value}"
 
 
-VEG_OPACITY = 0.4  # ~60% de transparence, pour laisser voir le fond de carte
 
-for i, layer in enumerate(ndvi_layers):
     spec = layer["spec"]
     is_main = i == 0  # couche NDVI principale : toujours visible, démo, pas de case à cocher
     if layer["tile_recent"]:
