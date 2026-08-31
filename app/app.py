@@ -337,11 +337,109 @@ def forest_stats(aoi_geojson_str, forest_spec, threshold=LOSS_THRESHOLD):
     return {"forest_ha": forest_ha, "loss_ha": loss_ha, "loss_pct": loss_pct}
 
 
-def build_pdf_report(spec, stats, site_count):
-    """PDF simple : zone, méthode/seuil de masque forêt, dates comparées, stats.
-    Version 1 volontairement basique — pas de carte image ni tableau de sites."""
+def _s2_true_color_image(aoi, start, end, cloud_pct=CLOUD_PCT_S2):
+    """Composite Sentinel-2 vraies couleurs médian, fenêtre mai-sept (cohérent avec
+    les autres couches d'affichage), pour servir de fond au rapport."""
+    coll = _s2_collection(aoi, start, end, cloud_pct, month_range=(MONTH_START, MONTH_END))
+    n = coll.size().getInfo()
+    if n == 0:
+        return None
+    return coll.median().clip(aoi)
+
+
+def _alpha_blend(background, overlay, opacity):
+    """Superpose `overlay` (image RVB 0-255, masquée là où elle ne s'applique pas)
+    sur `background` avec une opacité fixe là où overlay est présent, 0 ailleurs."""
+    alpha = overlay.mask().reduce(ee.Reducer.min()).multiply(opacity)
+    alpha3 = ee.Image.cat([alpha, alpha, alpha])
+    return background.multiply(ee.Image.constant(1).subtract(alpha3)).add(
+        overlay.unmask(0).multiply(alpha3)
+    )
+
+
+def build_report_ee_image(aoi, forest_spec):
+    """Image RVB (0-255) pour le rapport : fond satellite vraies couleurs (période
+    récente) + NDVI récent masqué forêt à 50% d'opacité + perte de forêt à 30%
+    d'opacité (70% transparence). None si pas assez d'images."""
+    true_color = _s2_true_color_image(aoi, RECENT_START, RECENT_END)
+    if true_color is None:
+        return None
+    background = true_color.visualize(bands=["B4", "B3", "B2"], min=0, max=3000)
+
+    ndvi_recent, _ = sentinel2_ndvi_image(aoi, RECENT_START, RECENT_END)
+    if ndvi_recent is not None:
+        ndvi_recent = _apply_forest_mask(ndvi_recent, aoi, forest_spec)
+        ndvi_vis = ndvi_recent.visualize(min=-1, max=1, palette=NDVI_PALETTE)
+        background = _alpha_blend(background, ndvi_vis, 0.5)
+
+    diff = _s2_ndvi_diff_image(aoi, EARLY_START, EARLY_END, RECENT_START, RECENT_END)
+    if diff is not None:
+        loss_mask = diff.lt(LOSS_THRESHOLD).selfMask()
+        loss_mask = _apply_forest_mask(loss_mask, aoi, forest_spec)
+        loss_vis = loss_mask.visualize(palette=["ff0000"])
+        background = _alpha_blend(background, loss_vis, 0.3)
+
+    return background
+
+
+def build_report_image_png(active_gdf, forest_spec, sites_gdf, site_name_col, margin_ratio=0.3, width_px=1000):
+    """Génère le PNG du rapport : centré sur la zone étudiée + marge de contexte,
+    couches EE (satellite + NDVI récent 50% + perte 30%) puis tous les points de
+    sites importés dessinés par-dessus (pas seulement ceux visibles dans la zone
+    d'analyse — tous les sites chargés dans l'app)."""
+    import requests
+    from PIL import Image as PILImage, ImageDraw
+
+    minx, miny, maxx, maxy = active_gdf.total_bounds
+    span_x, span_y = maxx - minx, maxy - miny
+    margin = max(span_x, span_y) * margin_ratio or 0.01
+    minx, maxx = minx - margin, maxx + margin
+    miny, maxy = miny - margin, maxy + margin
+
+    aoi = geopandas_to_ee(active_gdf)
+    ee_image = build_report_ee_image(aoi, forest_spec)
+    if ee_image is None:
+        return None
+
+    height_px = max(1, round(width_px * (maxy - miny) / (maxx - minx)))
+    region = ee.Geometry.Rectangle([minx, miny, maxx, maxy], "EPSG:4326", geodesic=False)
+    url = ee_image.getThumbURL({
+        "region": region,
+        "dimensions": f"{width_px}x{height_px}",
+        "format": "png",
+        "crs": "EPSG:4326",
+    })
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+
+    img = PILImage.open(io.BytesIO(resp.content)).convert("RGB")
+    draw = ImageDraw.Draw(img)
+
+    if sites_gdf is not None:
+        for _, row in sites_gdf.iterrows():
+            lon, lat = row.geometry.x, row.geometry.y
+            if not (minx <= lon <= maxx and miny <= lat <= maxy):
+                continue  # site hors du cadre visible de l'image — ne peut pas être dessiné
+            px = (lon - minx) / (maxx - minx) * width_px
+            py = (maxy - lat) / (maxy - miny) * height_px
+            r = 5
+            draw.ellipse([px - r, py - r, px + r, py + r], fill=(255, 140, 0), outline=(0, 0, 0))
+            if site_name_col:
+                label = str(row[site_name_col])
+                draw.text((px + r + 3, py - r), label, fill=(255, 255, 255))
+                draw.text((px + r + 2, py - r - 1), label, fill=(0, 0, 0))  # léger contour lisibilité
+
+    out = io.BytesIO()
+    img.save(out, format="PNG")
+    return out.getvalue()
+
+
+def build_pdf_report(spec, stats, site_count, report_image_png=None):
+    """PDF : zone, méthode/seuil de masque forêt, dates comparées, stats, et une
+    carte (satellite + NDVI récent + perte, avec les sites) si fournie."""
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import cm
+    from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
 
     buf = io.BytesIO()
@@ -368,6 +466,19 @@ def build_pdf_report(spec, stats, site_count):
     for line in lines:
         c.drawString(2 * cm, y, line)
         y -= 0.7 * cm
+
+    if report_image_png:
+        y -= 0.5 * cm
+        img_reader = ImageReader(io.BytesIO(report_image_png))
+        img_w, img_h = img_reader.getSize()
+        draw_w = width - 4 * cm
+        draw_h = draw_w * img_h / img_w
+        if y - draw_h < 2 * cm:  # pas assez de place, nouvelle page
+            c.showPage()
+            c.setFont("Helvetica", 10)
+            y = height - 3 * cm
+        c.drawImage(img_reader, 2 * cm, y - draw_h, width=draw_w, height=draw_h)
+        y -= draw_h
 
     c.showPage()
     c.save()
@@ -577,28 +688,39 @@ if uploaded_sites_file is not None:
 
 
 # =========================================================
-# EXPORT PDF (stats simples, sur le 1er seuil forêt actif)
+# EXPORT PDF (stats + carte, sur le 1er seuil forêt actif)
 # =========================================================
 if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0] is not None:
     st.subheader("📄 Report export")
     if st.button("Generate PDF report"):
-        with st.spinner("Computing statistics..."):
+        with st.spinner("Computing statistics and rendering map..."):
             try:
-                stats = forest_stats(aoi_geojson_str, active_forest_specs[0])
+                spec = active_forest_specs[0]
+                stats = forest_stats(aoi_geojson_str, spec)
                 if stats is None:
                     st.warning("Not enough cloud-free Sentinel-2 images to compute statistics.")
+                    st.session_state.pop("report_pdf_bytes", None)
                 else:
+                    report_png = build_report_image_png(active_gdf, spec, sites_gdf, site_name_col)
                     pdf_bytes = build_pdf_report(
-                        active_forest_specs[0], stats, len(sites_gdf) if sites_gdf is not None else 0
+                        spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
+                        report_image_png=report_png,
                     )
-                    st.download_button(
-                        "⬇️ Download PDF",
-                        data=pdf_bytes,
-                        file_name="vegetation_report.pdf",
-                        mime="application/pdf",
-                    )
+                    # Stocké en session_state : sinon le download_button, rendu dans le
+                    # même bloc `if st.button(...)`, disparaît dès le rerun déclenché
+                    # par son propre clic — un bug classique Streamlit.
+                    st.session_state["report_pdf_bytes"] = pdf_bytes
             except Exception as e:
                 st.error(f"Report generation failed: {e}")
+                st.session_state.pop("report_pdf_bytes", None)
+
+    if st.session_state.get("report_pdf_bytes"):
+        st.download_button(
+            "⬇️ Download PDF",
+            data=st.session_state["report_pdf_bytes"],
+            file_name="vegetation_report.pdf",
+            mime="application/pdf",
+        )
 
 
 # =========================================================
