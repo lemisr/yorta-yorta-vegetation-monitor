@@ -336,10 +336,10 @@ def forest_stats(aoi_geojson_str, forest_spec, threshold=LOSS_THRESHOLD):
 
     pixel_area = ee.Image.pixelArea()
     forest_area = pixel_area.updateMask(forest_mask).reduceRegion(
-        reducer=ee.Reducer.sum(), geometry=aoi, scale=10, maxPixels=1e13, bestEffort=True, tileScale=4,
+        reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13, bestEffort=True, tileScale=8,
     ).get("area")
     loss_area = pixel_area.updateMask(loss_mask).reduceRegion(
-        reducer=ee.Reducer.sum(), geometry=aoi, scale=10, maxPixels=1e13, bestEffort=True, tileScale=4,
+        reducer=ee.Reducer.sum(), geometry=aoi, scale=20, maxPixels=1e13, bestEffort=True, tileScale=8,
     ).get("area")
 
     result = ee.Dictionary({"forest_area": forest_area, "loss_area": loss_area}).getInfo()
