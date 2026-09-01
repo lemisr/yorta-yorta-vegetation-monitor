@@ -854,19 +854,19 @@ def _suffix(spec):
     return f" — {label}≥{value}"
 
 
-
-    spec = layer["spec"]
-    is_main = i == 0  # couche NDVI principale : toujours visible, démo, pas de case à cocher
-    if layer["tile_recent"]:
-        add_tile_layer(
-            m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)",
-            show=True, opacity=VEG_OPACITY, control=not is_main,
-        )
-    if layer["tile_early"]:
-        add_tile_layer(
-            m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)",
-            show=False, opacity=VEG_OPACITY,
-        )
+    for i, layer in enumerate(ndvi_layers):
+        spec = layer["spec"]
+        is_main = i == 0  # couche NDVI principale : toujours visible, démo, pas de case à cocher
+        if layer["tile_recent"]:
+            add_tile_layer(
+                m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)",
+                show=True, opacity=VEG_OPACITY, control=not is_main,
+            )
+        if layer["tile_early"]:
+            add_tile_layer(
+                m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)",
+                show=False, opacity=VEG_OPACITY,
+            )
 
 if sites_gdf is not None:
     sites_layer = folium.FeatureGroup(name="Places", show=True)
