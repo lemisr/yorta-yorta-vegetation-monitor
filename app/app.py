@@ -385,17 +385,32 @@ def _fetch_tile(url_template, z, x, y, session):
 
 def _paste_tile_layer(canvas, url_template, zoom, tx_start, tx_end, ty_start, ty_end, gx0, gy0, session, opacity=1.0):
     """Compose une couche de tuiles XYZ complète sur `canvas`, à l'opacité donnée."""
-    for tx in range(tx_start, tx_end + 1):
-        for ty in range(ty_start, ty_end + 1):
-            tile = _fetch_tile(url_template, zoom, tx, ty, session)
-            if opacity < 1.0:
-                alpha = tile.getchannel("A").point(lambda a: int(a * opacity))
-                tile.putalpha(alpha)
-            px, py = tx * 256 - gx0, ty * 256 - gy0
-            canvas.alpha_composite(tile, dest=(px, py))
+    from concurrent.futures import ThreadPoolExecutor
 
+    coords = [
+        (tx,ty)
+        for tx in range(tx_start,tx_end +1)
+        for ty in range(ty_start,ty_end +1)
+    ]
+    
+    def_fetch(coord):
+        tx,ty = coord
+        tile = _fetch_tile(url_template, zoom, tx, ty, session)
+        if opacity < 1.0:
+            alpha = tile.getchannel("A").point(lambda a: int(a * opacity))
+            tile.putalpha(alpha)
+        return tx, ty, tile
 
-def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, margin_ratio=0.3, target_px=900):
+    with ThreadPoolExecutor(max_workers=16) as executor:
+        results = list(executor.map(_fetch,coords))
+
+    for tx, ty, tile in results:
+
+        px, py = tx * 256 - gx0, ty * 256 - gy0
+        canvas.alpha_composite(tile, dest=(px, py))
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, cache_key, margin_ratio=0.3, target_px=900):
     """Composite le rapport à partir des MÊMES tuiles que celles affichées sur la
     carte (satellite + routes + labels Esri, NDVI récent, perte) — pas de nouveau
     calcul Earth Engine séparé : c'est littéralement un "screenshot" de ce qui est
@@ -405,7 +420,7 @@ def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, 
     import requests
     from PIL import Image as PILImage, ImageDraw
 
-    minx, miny, maxx, maxy = active_gdf.total_bounds
+    minx, miny, maxx, maxy = _active_gdf.total_bounds
     span_x, span_y = maxx - minx, maxy - miny
     margin = max(span_x, span_y) * margin_ratio or 0.01
     minx, maxx = minx - margin, maxx + margin
@@ -441,7 +456,7 @@ def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, 
         return px_f * 256 - gx0, py_f * 256 - gy0
 
     # Contour de la zone étudiée (même style que sur la carte : blanc, pointillé)
-    for geom in active_gdf.geometry:
+    for geom in _active_gdf.geometry:
         rings = [geom.exterior] + list(geom.interiors) if geom.geom_type == "Polygon" else [
             r for poly in geom.geoms for r in [poly.exterior] + list(poly.interiors)
         ]
@@ -449,8 +464,8 @@ def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, 
             pts = [_pixel(lon, lat) for lon, lat in ring.coords]
             draw.line(pts, fill=(255, 255, 255), width=3)
 
-    if sites_gdf is not None:
-        for _, row in sites_gdf.iterrows():
+    if _sites_gdf is not None:
+        for _, row in _sites_gdf.iterrows():
             lon, lat = row.geometry.x, row.geometry.y
             if not (minx <= lon <= maxx and miny <= lat <= maxy):
                 continue  # site hors du cadre visible de l'image — ne peut pas être dessiné
@@ -757,7 +772,7 @@ if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0
                     ndvi_tile_url = ndvi_layers[0]["tile_recent"] if ndvi_layers else None
                     loss_tile_url = loss_layers[0]["tile_loss"] if loss_layers else None
                     report_png = build_report_image_png(
-                        active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col
+                        active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, aoi_geojson_str
                     )
                     pdf_bytes = build_pdf_report(
                         spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
