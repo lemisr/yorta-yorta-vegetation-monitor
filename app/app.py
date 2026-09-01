@@ -860,12 +860,12 @@ for i, layer in enumerate(ndvi_layers):
     if layer["tile_recent"]:
         add_tile_layer(
             m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)",
-            show=True, opacity=VEG_OPACITY, control=True,
+            show=True, control=True,
         )
     if layer["tile_early"]:
         add_tile_layer(
             m, layer["tile_early"], f"NDVI {EARLY_LABEL}{_suffix(spec)} (Sentinel-2)",
-            show=True, opacity=VEG_OPACITY, control=True,
+            show=True, control=True,
         )
 
 if sites_gdf is not None:
