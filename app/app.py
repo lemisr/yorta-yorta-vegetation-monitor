@@ -854,9 +854,9 @@ def _suffix(spec):
     return f" — {label}≥{value}"
 
 
-
+for i, layer in enumerate(ndvi_layers):
     spec = layer["spec"]
-    is_main = i == 0  # couche NDVI principale : toujours visible, démo, pas de case à cocher
+    
     if layer["tile_recent"]:
         add_tile_layer(
             m, layer["tile_recent"], f"NDVI {RECENT_LABEL}{_suffix(spec)} (Sentinel-2)",
