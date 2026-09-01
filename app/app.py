@@ -482,7 +482,7 @@ def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf
     return out.getvalue()
 
 
-def build_pdf_report(spec, stats, site_count, report_image_png=None):
+def build_pdf_report(spec, site_count, report_image_png=None):
     """PDF : zone, méthode/seuil de masque forêt, dates comparées, stats, et une
     carte (satellite + NDVI récent + perte, avec les sites) si fournie."""
     from reportlab.lib.pagesizes import A4
@@ -507,9 +507,7 @@ def build_pdf_report(spec, stats, site_count, report_image_png=None):
         f"Loss threshold: dNDVI < {LOSS_THRESHOLD}",
         f"Cultural/heritage sites loaded: {site_count}",
         "",
-        f"Reference forest area ({EARLY_LABEL}): {stats['forest_ha']:.1f} ha",
-        f"Forest loss detected: {stats['loss_ha']:.1f} ha",
-        f"Loss as % of reference forest: {stats['loss_pct']:.1f}%",
+        
     ]
     for line in lines:
         c.drawString(2 * cm, y, line)
@@ -760,29 +758,24 @@ if uploaded_sites_file is not None:
 if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0] is not None:
     st.subheader("📄 Report export")
     if st.button("Generate PDF report"):
-        with st.spinner("Computing statistics and rendering map..."):
+        with st.spinner("Rendering map..."):
             try:
                 spec = active_forest_specs[0]
-                stats = forest_stats(aoi_geojson_str, spec)
-                if stats is None:
-                    st.warning("Not enough cloud-free Sentinel-2 images to compute statistics.")
-                    st.session_state.pop("report_pdf_bytes", None)
-                    st.session_state.pop("report_error", None)
-                else:
-                    ndvi_tile_url = ndvi_layers[0]["tile_recent"] if ndvi_layers else None
-                    loss_tile_url = loss_layers[0]["tile_loss"] if loss_layers else None
-                    report_png = build_report_image_png(
-                        active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, aoi_geojson_str
-                    )
-                    pdf_bytes = build_pdf_report(
-                        spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
-                        report_image_png=report_png,
-                    )
+                
+                ndvi_tile_url = ndvi_layers[0]["tile_recent"] if ndvi_layers else None
+                loss_tile_url = loss_layers[0]["tile_loss"] if loss_layers else None
+                report_png = build_report_image_png(
+                    active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, aoi_geojson_str
+                )
+                pdf_bytes = build_pdf_report(
+                    spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
+                    report_image_png=report_png,
+                )
                     # Stocké en session_state : sinon le download_button, rendu dans le
                     # même bloc `if st.button(...)`, disparaît dès le rerun déclenché
                     # par son propre clic — un bug classique Streamlit.
-                    st.session_state["report_pdf_bytes"] = pdf_bytes
-                    st.session_state.pop("report_error", None)
+                st.session_state["report_pdf_bytes"] = pdf_bytes
+                st.session_state.pop("report_error", None)
             except Exception:
                 import traceback
                 # Stocké en session_state pour la même raison que le PDF ci-dessus :
