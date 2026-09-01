@@ -768,7 +768,7 @@ if aoi_geojson_str is not None and active_forest_specs and active_forest_specs[0
                     active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, site_name_col, aoi_geojson_str
                 )
                 pdf_bytes = build_pdf_report(
-                    spec, stats, len(sites_gdf) if sites_gdf is not None else 0,
+                    spec, len(sites_gdf) if sites_gdf is not None else 0,
                     report_image_png=report_png,
                 )
                     # Stocké en session_state : sinon le download_button, rendu dans le
