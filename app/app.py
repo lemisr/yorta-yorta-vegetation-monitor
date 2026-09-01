@@ -856,7 +856,7 @@ if active_gdf is not None:
         active_gdf[["geometry"]].to_json(),
         name="Selected area",
         style_function=lambda x: {
-            "color": "#333333", "weight": 3, "dashArray": "8, 4", "fillOpacity": 0,
+            "color": "#009135", "weight": 3, "fillOpacity": 0,
         },
     ).add_to(m)
 
