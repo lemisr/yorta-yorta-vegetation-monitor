@@ -393,7 +393,7 @@ def _paste_tile_layer(canvas, url_template, zoom, tx_start, tx_end, ty_start, ty
         for ty in range(ty_start,ty_end +1)
     ]
     
-    def_fetch(coord):
+    def _fetch(coord):
         tx,ty = coord
         tile = _fetch_tile(url_template, zoom, tx, ty, session)
         if opacity < 1.0:
