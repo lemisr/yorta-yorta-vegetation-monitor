@@ -426,7 +426,7 @@ def build_report_image_png(active_gdf, ndvi_tile_url, loss_tile_url, sites_gdf, 
 
     layers = [(ESRI_SATELLITE_URL, 1.0), (ESRI_ROADS_URL, 1.0), (ESRI_LABELS_URL, 1.0)]
     if ndvi_tile_url:
-        layers.append((ndvi_tile_url, VEG_OPACITY))
+        layers.append((ndvi_tile_url))
     if loss_tile_url:
         layers.append((loss_tile_url, 1.0))
 
