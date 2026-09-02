@@ -691,7 +691,7 @@ aoi_geojson_str = None
 if active_gdf is not None:
     aoi_ee = geopandas_to_ee(active_gdf)
     aoi_geojson_str = json.dumps(aoi_ee.getInfo())
-
+    st.write("Type de géométrie envoyée", json.loads(aoi_geojson_str).get("type"))
     try:
         for i, spec in enumerate(active_forest_specs):
             tile_recent, n_recent = sentinel2_ndvi_tile(
