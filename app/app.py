@@ -621,28 +621,17 @@ st.sidebar.caption(
 )
 mask_method = st.sidebar.radio(
     "Method",
-    options=["NDVI (annual)", "Dynamic World"],
-    index=1,  # on teste Dynamic World par défaut
+    options=["Dynamic World"],
+    index=0,  # on teste Dynamic World par défaut
 )
 
-if mask_method == "NDVI (annual)":
-    st.sidebar.caption(
-        f"Keeps pixels whose full-year median NDVI ({EARLY_LABEL}) stays above "
-        "the threshold — forest stays dense year-round, crops don't."
-    )
-    ndvi_mode = st.sidebar.radio(
-        "NDVI threshold",
-        options=list(NDVI_MASK_CHOICES.keys()),
-        index=1,  # "0.5"
-    )
-    active_forest_specs = [("ndvi", t) if t is not None else None for t in (NDVI_MASK_CHOICES[ndvi_mode] or [None])]
-else:
-    st.sidebar.caption(
-        "Google Dynamic World: pixel-level tree probability from a trained "
-        f"Sentinel-2 classifier, averaged over {EARLY_LABEL}."
-    )
-    dw_threshold = st.sidebar.slider("Tree probability threshold", 0.0, 1.0, 0.35, 0.05)
-    active_forest_specs = [("dw", dw_threshold)]
+
+st.sidebar.caption(
+    "Google Dynamic World: pixel-level tree probability from a trained "
+    f"Sentinel-2 classifier."
+)
+dw_threshold = st.sidebar.slider("Tree probability threshold", 0.0, 1.0, 0.35, 0.05)
+active_forest_specs = [("dw", dw_threshold)]
 
 # Limite de l'application (rectangle déjà présent dans le repo)
 boundary = gpd.read_file(BOUNDARY_PATH)
