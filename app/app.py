@@ -554,7 +554,7 @@ def legend_html_v2(items, bottom=30):
             gradient = ", ".join(f"#{c}" for c in item["palette"])
             blocks.append(f"""
               <div style="margin-bottom:10px;">
-                <div style="font-weight:600; margin-bottom:4px;">{item['title']}</div>
+                <div style="font-weight:600; margin-bottom:4px; color:#f0f0f0;">{item['title']}</div>
                 <div style="height:10px; border-radius:5px;
                             background: linear-gradient(to right, {gradient});"></div>
                 <div style="display:flex; justify-content:space-between; font-size:10px;
