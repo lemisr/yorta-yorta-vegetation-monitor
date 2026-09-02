@@ -88,7 +88,8 @@ except Exception as e:
 # =========================================================
 def geopandas_to_ee(gdf):
     """Convertit la géométrie d'un GeoDataFrame (1 feature) en ee.Geometry."""
-    geojson = json.loads(gdf[["geometry"]].to_json())
+    combined_geom = gdf.geometry.unary_union
+    geojson = json.loads(gpd.GeoSeries([combined_geom], crs=gdf.crs).to_json())
     return ee.Geometry(geojson["features"][0]["geometry"])
 
 
@@ -659,6 +660,11 @@ if uploaded_file is not None:
     if uploaded_area.crs != boundary.crs:
         uploaded_area = uploaded_area.to_crs(boundary.crs)
 
+    #Fusionne tous les morceaux en une seule géométrie
+    combined_geom = uploaded_area.geometry.unary_union
+    uploaded_area = gpd.GeoDataFrame(geometry=[combined_geom], crs=uploaded_area.crs)
+
+
     if uploaded_area.geometry.iloc[0].within(boundary_geom):
         active_gdf = uploaded_area
         active_source = "upload"
@@ -691,7 +697,7 @@ aoi_geojson_str = None
 if active_gdf is not None:
     aoi_ee = geopandas_to_ee(active_gdf)
     aoi_geojson_str = json.dumps(aoi_ee.getInfo())
-    st.write("Type de géométrie envoyée", json.loads(aoi_geojson_str).get("type"))
+    
     try:
         for i, spec in enumerate(active_forest_specs):
             tile_recent, n_recent = sentinel2_ndvi_tile(
