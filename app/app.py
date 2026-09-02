@@ -558,7 +558,7 @@ def legend_html_v2(items, bottom=30):
                 <div style="height:10px; border-radius:5px;
                             background: linear-gradient(to right, {gradient});"></div>
                 <div style="display:flex; justify-content:space-between; font-size:10px;
-                            color:#555; margin-top:2px;">
+                            color:#bbb; margin-top:2px;">
                   <span>{item['low']}</span><span>{item['high']}</span>
                 </div>
               </div>
@@ -568,7 +568,7 @@ def legend_html_v2(items, bottom=30):
               <div style="display:flex; align-items:center; margin-bottom:4px;">
                 <span style="display:inline-block; width:12px; height:12px; border-radius:3px;
                              background:#{item['color']}; margin-right:8px;"></span>
-                <span style="font-size:11px; color:#333;">{item['title']}</span>
+                <span style="font-size:11px; color:#eee;">{item['title']}</span>
               </div>
             """)
     body = "".join(blocks)
