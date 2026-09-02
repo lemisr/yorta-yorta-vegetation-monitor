@@ -575,7 +575,7 @@ def legend_html_v2(items, bottom=30):
     return f"""
     <div style="position: fixed; bottom: {bottom}px; left: 24px; width: 230px;
                 background-color: rgba(255,255,255,0.95); border-radius:10px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.25); z-index:9999;
+                box-shadow: 0 2px 8px rgba(30,30,30,30.92); z-index:9999;
                 font-family: -apple-system, Helvetica, Arial, sans-serif;
                 padding:12px 14px;">
       {body}
