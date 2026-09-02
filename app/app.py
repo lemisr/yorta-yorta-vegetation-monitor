@@ -887,7 +887,7 @@ for layer in loss_layers:
     if layer["tile_loss"]:
         add_tile_layer(
             m, layer["tile_loss"],
-            f"Forest loss (dNDVI < {LOSS_THRESHOLD}{_suffix(layer['spec'])})",
+            f"Forest loss ({_suffix(layer['spec'])})",
             show=True,
         )
 
