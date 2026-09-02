@@ -463,7 +463,7 @@ def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf
         ]
         for ring in rings:
             pts = [_pixel(lon, lat) for lon, lat in ring.coords]
-            draw.line(pts, fill=(4, 82, 33), width=1)
+            draw.line(pts, fill=(4, 82, 33), width=2)
 
     if _sites_gdf is not None:
         for _, row in _sites_gdf.iterrows():
