@@ -806,6 +806,8 @@ world = box(-180, -90, 180, 90)
 mask_gdf = gpd.GeoDataFrame(geometry=[world.difference(boundary_geom)], crs="EPSG:4326")
 folium.GeoJson(
     mask_gdf,
+    name="Area mask",
+    control=False,
     style_function=lambda x: {"fillColor": "black", "color": "black", "fillOpacity": 0.5, "weight": 0},
 ).add_to(m)
 
