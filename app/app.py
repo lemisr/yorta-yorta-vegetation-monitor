@@ -912,6 +912,24 @@ if any_ee_layer:
 else:
     folium.LayerControl().add_to(m)
 
+layer_control_css = """
+<style>
+.leaflet-control-layers{
+   background-color:rgba(30,30,30,0.92) !important;
+   border-radius: 10px !important;
+   box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
+   padding: 10px 12px !important;
+}    
+.leaflet-control-layers-list label {
+   color: #f0f0f0 !important;
+}
+.leaflet-control-layers-list label {
+   color: #f0f0f0 !important;
+}
+</style>
+"""
+m.get_root().html.add_child(folium.Element(layer_control_css))
+
 m.fit_bounds([[miny, minx], [maxy, maxx]])
 
 legend_items = []
