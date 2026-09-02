@@ -887,7 +887,7 @@ for layer in loss_layers:
     if layer["tile_loss"]:
         add_tile_layer(
             m, layer["tile_loss"],
-            f"Forest loss between the two periods)",
+            f"Forest loss 2019-2025",
             show=True,
         )
 
