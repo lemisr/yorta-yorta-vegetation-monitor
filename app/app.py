@@ -918,7 +918,7 @@ legend_items = []
 if ndvi_layers and ndvi_layers[0]["tile_recent"]:
     legend_items.append({
         "type": "gradient",
-        "title": f"Vegetation (NDVI, {RECENT_LABEL})",
+        "title": f"Vegetation NDVI",
         "palette": NDVI_PALETTE,
         "low": "Low", "high": "High",
     })
