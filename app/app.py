@@ -23,6 +23,20 @@ st.set_page_config(
     layout="wide",
 )
 
+st.markdown("""
+<style>
+.stApp{
+   background-color: #1e1e1e;
+   color: #f0f0f0;
+}
+section[data-testid="stSidebar"] {
+  background-color: #262626;
+}
+</style>
+""", unsafe_allow_html=True)
+   
+
+
 NDVI_PALETTE = ["7f7f7f", "a6611a", "dfc27d", "f5f5f5", "a6d96a", "1a9850", "006837"]
 DIFF_PALETTE = ["67001f", "d73027", "fee08b", "ffffff", "d9ef8b", "1a9850", "00441b"]
 LOSS_COLOR_CYCLE = ["ff0000", "ff6600", "ffcc00"]  # couleurs distinctes en mode comparaison
