@@ -997,6 +997,15 @@ if legend_items:
 # =========================================================
 # AFFICHAGE (un seul appel st_folium) + capture du dessin
 # =========================================================
+
+m.get_root().html.add_child(folium.Element("""
+<style>
+html, body {
+  background-color: #1e1e1e !important;
+}
+</style>
+"""))
+
 map_data = st_folium(m, width=1000, height=700, key="main_map")
 
 if map_data and map_data.get("all_drawings"):
