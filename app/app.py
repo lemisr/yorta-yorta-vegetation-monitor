@@ -970,7 +970,7 @@ layer_control_css = """
    color: #f0f0f0 !important;
 }
 .leaflet-draw-toolbar a {
-   background-color: #6b6b6b !important;
+   background-color: #2a2a2a !important;
    border-color: #444 !important;
 }  
 .leaflet-draw-toolbar a:hover {
@@ -984,7 +984,7 @@ layer_control_css = """
    background-color: #383838 !important;
 }
 .leaflet-control-zoom a {
-   background-color: #6b6b6b !important;
+   background-color: #2a2a2a !important;
    color: #3a3a3a !important;
    border-color: #444 !important;
 }
