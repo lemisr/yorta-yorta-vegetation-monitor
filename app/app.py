@@ -56,6 +56,10 @@ section[data-testid="stSidebar"] * {
    background-color: #383838 !important;
    border: 1px solid #666 !important;
 }
+[data-testid="stFileUploader"] label,
+[data-testid="stFileUploader"] label p {
+  color: #f0f0f0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
    
