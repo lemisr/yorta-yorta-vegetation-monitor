@@ -35,6 +35,18 @@ section[data-testid="stSidebar"] {
 section[data-testid="stSidebar"] * {
   color: #f0f0f0 !important;
 }
+[data_testid="stFileuploader"] {
+  background-color: #2a2a2a;
+  border-radius: 8px;
+  padding: 10px;
+}
+[data-testid="stFileUploaderDropzone"] {
+  background-color: #2a2a2a !important;
+  color: #f0f0f0 !important;
+}
+[data-testid="stFileUploaderDropzone"] * {
+  color: #f0f0f0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
    
