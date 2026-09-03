@@ -970,11 +970,8 @@ layer_control_css = """
    color: #f0f0f0 !important;
 }
 .leaflet-draw-toolbar a {
-   background-color: #2a2a2a !important;
+   background-color: #6b6b6b !important;
    border-color: #444 !important;
-}
-.leaflet-draw-toolbar a img {
-   filter: invert(1) brightness(1.8);
 }  
 .leaflet-draw-toolbar a:hover {
    background-color: #383838 !important;
@@ -987,7 +984,7 @@ layer_control_css = """
    background-color: #383838 !important;
 }
 .leaflet-control-zoom a {
-   background-color: #2a2a2a !important;
+   background-color: #6b6b6b !important;
    color: #f0f0f0 !important;
    border-color: #444 !important;
 }
