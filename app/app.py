@@ -970,14 +970,14 @@ layer_control_css = """
    color: #f0f0f0 !important;
 }
 .leaflet-draw-toolbar a {
-   background-color: #2a2a2a !important;
+   background-color: #f0f0f0 !important;
    border-color: #444 !important;
 }  
 .leaflet-draw-toolbar a:hover {
    background-color: #383838 !important;
 }
 .leaflet-draw-actions a {
-   background-color: #2a2a2a !important;
+   background-color: #f0f0f0 !important;
    color: #f0f0f0 !important;
 }
 .leaflet-draw-actions a:hover {
