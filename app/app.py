@@ -969,6 +969,20 @@ layer_control_css = """
 .leaflet-control-layers-list label {
    color: #f0f0f0 !important;
 }
+.leaflet-draw-toolbar a {
+   background-color: #2a2a2a !important;
+   border-color: #444 !important;
+}
+.leaflet-draw-toolbar a:hover {
+   background-color: #383838 !important;
+}
+.leaflet-draw-actions a {
+   background-color: #2a2a2a !important;
+   color: #f0f0f0 !important;
+}
+.leaflet-draw-actions a:hover {
+   background-color: #383838 !important;
+}  
 </style>
 """
 m.get_root().html.add_child(folium.Element(layer_control_css))
