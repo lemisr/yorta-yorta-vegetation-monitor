@@ -64,8 +64,6 @@ iframe[title="streamlit_folium.st_folium"] {
   border: 3px solid #3a4a42 !important;
   border-radius: 14px !important;
   box-shadow: 0 4px 16px rgba(0,0,0,0.4) !important;
-  display: block !important;
-  width: fit-content !important;
 }
 </style>
 """, unsafe_allow_html=True)
