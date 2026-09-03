@@ -47,6 +47,15 @@ section[data-testid="stSidebar"] * {
 [data-testid="stFileUploaderDropzone"] * {
   color: #f0f0f0 !important;
 }
+.stButton button, [data-testid="stFileUploaderDropzone"] button {
+   background-color: #2a2a2a !important;
+   color: #f0f0f0 !important;
+   border: 1px solid #444 !important
+}
+.stButton button:hover, [data-testid="stFileUploaderDropzone"] button:hover {
+   background-color: #383838 !important;
+   border: 1px solid #666 !important;
+}
 </style>
 """, unsafe_allow_html=True)
    
