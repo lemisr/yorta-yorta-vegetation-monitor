@@ -32,7 +32,7 @@ st.markdown("""
 section[data-testid="stSidebar"] {
   background-color: #262626;
 }
-section[data-testid="stSidebar"]*{
+section[data-testid="stSidebar"] * {
   color: #f0f0f0 !important;
 }
 </style>
