@@ -958,7 +958,7 @@ else:
 layer_control_css = """
 <style>
 .leaflet-control-layers{
-   background-color:rgba(30,30,30,0.92) !important;
+   background-color:rgba(107,107,107,0.92) !important;
    border-radius: 10px !important;
    box-shadow: 0 2px 8px rgba(0,0,0,0.25) !important;
    padding: 10px 12px !important;
