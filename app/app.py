@@ -1023,12 +1023,7 @@ html, body {
 
 col_left, col_center, col_right = st.columns([1, 8, 1])
 with col_center:
-  st.markdown(
-    '<div style="border: 3px solid #3a4a42; border-radius: 14px;'
-    'box-shadow: 0 4px 16px rgba(0,0,0,0.4); oveflow: hidden;'
-    'display: inline_block;">',
-    unsafe_allow_html=True,
-  )  
+  
   map_data = st_folium(m, width=1300, height=850, key="main_map")
 
 if map_data and map_data.get("all_drawings"):
