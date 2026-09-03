@@ -973,7 +973,7 @@ layer_control_css = """
    background-color: #2a2a2a !important;
    border-color: #444 !important;
 }
-.leaflet-draw-toolbar a {
+.leaflet-draw-toolbar a::before {
    filter: invert(1) brightness(1.8);
 }  
 .leaflet-draw-toolbar a:hover {
