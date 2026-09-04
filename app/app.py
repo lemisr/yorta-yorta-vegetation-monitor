@@ -924,7 +924,7 @@ if sites_gdf is not None:
             location=[row.geometry.y, row.geometry.x],
             popup=label,
             tooltip=label,
-            icon=folium.DivIcon(html=f'<div style="display: flex; align-items: center; white-space: nowrap;"><div style="background-color: white; border: 2px solid black; border-radius: 50%; width: 14px; height: 14px;"></div><span style="margin-left: 4px; color: white; font-weight: bold; text-shadow: 1px 1px 2px black;">{label}</span></div>'),
+            icon=folium.DivIcon(html=f'<div style="display:flex;align-items:center;white-space:nowrap;"><span style="background-color:white;border:2px solid black;border-radius:50%;width:14px;height:14px;display:inline-block;"></span><span style="margin-left:4px;color:white;font-weight:bold;text-shadow:1px 1px 2px black;">{label}</span></div>'),
         ).add_to(sites_layer)
     sites_layer.add_to(m)
 
