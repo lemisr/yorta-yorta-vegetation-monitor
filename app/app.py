@@ -60,7 +60,13 @@ section[data-testid="stSidebar"] * {
 [data-testid="stFileUploader"] label p {
   color: #f0f0f0 !important;
 }
-
+[data-testid="stFileUploaderFile"] {
+  background-color: #2a2a2a !important;
+  color: #f0f0f0 !important;
+}
+[data-testid="stFileUploaderFile"] * {
+  color: #f0f0f0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
    
