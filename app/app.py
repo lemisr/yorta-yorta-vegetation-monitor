@@ -986,7 +986,7 @@ layer_control_css = """
 }
 .leaflet-control-zoom a {
     background-color: #2a2a2a !important;
-    color: #9a9a9a !important;
+    color: #7a7a7a !important;
     border-color: #444 !important;
 }
 .leaflet-control-zoom a:hover {
