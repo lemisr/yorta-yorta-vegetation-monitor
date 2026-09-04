@@ -926,7 +926,7 @@ if sites_gdf is not None:
             tooltip=label,
             icon=folium.Divlcon(html="""
               <div style="
-            background-color:white;
+               background-color:white;
                border: 2px solid black;
                border-radius: 50%;
                width: 14px;
