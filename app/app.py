@@ -506,7 +506,7 @@ def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf
         ]
         for ring in rings:
             pts = [_pixel(lon, lat) for lon, lat in ring.coords]
-            draw.line(pts, fill=(4, 82, 33), width=2)
+            draw.line(pts, fill=(242, 201, 76), width=2)
 
     if _sites_gdf is not None:
         for _, row in _sites_gdf.iterrows():
@@ -887,7 +887,7 @@ if active_gdf is not None:
         active_gdf[["geometry"]].to_json(),
         name="Selected area",
         style_function=lambda x: {
-            "color": "#045221", "weight": 2, "fillOpacity": 0,
+            "color": "#f2c94c", "weight": 2, "fillOpacity": 0,
         },
     ).add_to(m)
 
