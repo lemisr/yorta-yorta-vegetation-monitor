@@ -77,6 +77,16 @@ section[data-testid="stSidebar"] * {
 [data-testid="stFileUploaderDeleteBtn"] svg {
     fill: #f0f0f0 !important;
 }
+[data-testid="stFileUploaderFile"] {
+    background-color: #2a2a2a !important;
+}
+[data-testid="stFileUploaderFile"] div {
+    background-color: #2a2a2a !important;
+    color: #f0f0f0 !important;
+}
+[data-testid="stFileUploaderFile"] svg {
+    fill: #f0f0f0 !important;
+}
 </style>
 """, unsafe_allow_html=True)
    
