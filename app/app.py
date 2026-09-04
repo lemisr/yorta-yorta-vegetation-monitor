@@ -924,16 +924,7 @@ if sites_gdf is not None:
             location=[row.geometry.y, row.geometry.x],
             popup=label,
             tooltip=label,
-            icon=folium.Divlcon(html="""
-              <div style="
-               background-color:white;
-               border: 2px solid black;
-               border-radius: 50%;
-               width: 14px;
-               height: 14px;
-              ">
-              </div>
-              """),
+            icon=folium.Divlcon(html='div style="background-color: white; border: 2px solid black; border-radius: 50%; width: 14px; height: 14px;"></div>'),
         ).add_to(sites_layer)
     sites_layer.add_to(m)
 
