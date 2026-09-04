@@ -944,6 +944,10 @@ draw = Draw(
         "marker": False,
         "circlemarker": False,
     },
+    edit_options={
+        "edit":False,
+        "remove":False,
+    },
 )
 draw.add_to(m)
 
