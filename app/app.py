@@ -506,7 +506,8 @@ def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf
         ]
         for ring in rings:
             pts = [_pixel(lon, lat) for lon, lat in ring.coords]
-            draw.line(pts, fill=(242, 201, 76), width=2)
+            draw.line(pts, fill=(0, 0, 0), width=4)
+                   draw.line(pts, fill=(255, 255, 255), width=2)                
 
     if _sites_gdf is not None:
         for _, row in _sites_gdf.iterrows():
@@ -887,7 +888,8 @@ if active_gdf is not None:
         active_gdf[["geometry"]].to_json(),
         name="Selected area",
         style_function=lambda x: {
-            "color": "#f2c94c", "weight": 2, "fillOpacity": 0,
+            "color": "#ffffff", "weight": 2, "fillOpacity": 0,
+            "className":"selected-area-outline",
         },
     ).add_to(m)
 
@@ -991,6 +993,9 @@ layer_control_css = """
 }
 .leaflet-control-zoom a:hover {
     background-color: #383838 !important;
+}
+.selected-area-outline {
+   filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
 }
 </style>
 """
