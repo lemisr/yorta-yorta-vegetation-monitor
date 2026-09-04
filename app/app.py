@@ -995,7 +995,7 @@ layer_control_css = """
     background-color: #383838 !important;
 }
 .selected-area-outline {
-   filter: drop-shadow(0 0 3px rgba(0,0,0,0.8));
+   filter: drop-shadow(0 0 4px rgba(0,0,0,1)) drop-shadow(0 0 4px rgba(0,0,0,1));
 }
 </style>
 """
