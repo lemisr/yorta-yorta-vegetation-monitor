@@ -47,10 +47,10 @@ section[data-testid="stSidebar"] * {
 [data-testid="stFileUploaderDropzone"] * {
   color: #f0f0f0 !important;
 }
-.stButton button, .stDownloadbutton button, [data-testid="stFileUploaderDropzone"] button {
+.stButton button, .stDownloadButton button, [data-testid="stFileUploaderDropzone"] button {
    background-color: #2a2a2a !important;
    color: #f0f0f0 !important;
-   border: 1px solid #444 !important
+   border: 1px solid #444 !important;
 }
 .stButton button:hover, .stDownloadButton button:hover, [data-testid="stFileUploaderDropzone"] button:hover {
    background-color: #383838 !important;
