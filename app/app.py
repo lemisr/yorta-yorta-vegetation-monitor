@@ -454,7 +454,7 @@ def _paste_tile_layer(canvas, url_template, zoom, tx_start, tx_end, ty_start, ty
         canvas.alpha_composite(tile, dest=(px, py))
 
 @st.cache_data(ttl=3600, show_spinner=False)
-def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf, site_name_col, cache_key, margin_ratio=0.3, target_px=900):
+def build_report_image_png(_active_gdf, ndvi_tile_url, loss_tile_url, _sites_gdf, site_name_col, cache_key, margin_ratio=0.3, target_px=2000):
     """Composite le rapport à partir des MÊMES tuiles que celles affichées sur la
     carte (satellite + routes + labels Esri, NDVI récent, perte) — pas de nouveau
     calcul Earth Engine séparé : c'est littéralement un "screenshot" de ce qui est
