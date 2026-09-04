@@ -924,7 +924,7 @@ if sites_gdf is not None:
             location=[row.geometry.y, row.geometry.x],
             popup=label,
             tooltip=label,
-            icon=folium.Icon(color="orange", icon="map-pin", prefix="fa"),
+            icon=folium.Icon(color="orange", icon="map-pin", prefix="fa-solid"),
         ).add_to(sites_layer)
     sites_layer.add_to(m)
 
